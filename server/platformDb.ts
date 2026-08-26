@@ -49,6 +49,26 @@ export type ProviderAvailability = {
   urgent: boolean
 }
 
+export type ProviderControl = {
+  organizationId: string
+  status: 'pending' | 'approved' | 'suspended'
+  licenseExpiresAt: string | null
+  insuranceExpiresAt: string | null
+  reason: string
+  updatedAt: string
+}
+
+export type Dispute = {
+  id: string
+  organizationId: string
+  bookingId: string | null
+  category: 'refund' | 'quality' | 'safety' | 'billing'
+  summary: string
+  status: 'open' | 'investigating' | 'resolved'
+  resolution: string | null
+  createdAt: string
+}
+
 export function createPlatformStore(filename: string) {
   const db = new Database(filename)
   db.pragma('journal_mode = WAL')
@@ -103,6 +123,36 @@ export function createPlatformStore(filename: string) {
       urgent INTEGER NOT NULL,
       UNIQUE (organization_id, weekday, start_time, end_time)
     );
+    CREATE TABLE IF NOT EXISTS provider_controls (
+      organization_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL CHECK (status IN ('pending','approved','suspended')),
+      license_expires_at TEXT,
+      insurance_expires_at TEXT,
+      reason TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS disputes (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      booking_id TEXT REFERENCES service_bookings(id),
+      category TEXT NOT NULL CHECK (category IN ('refund','quality','safety','billing')),
+      summary TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('open','investigating','resolved')),
+      resolution TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      actor_user_id TEXT NOT NULL,
+      actor_organization_id TEXT NOT NULL,
+      actor_role TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      metadata_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `)
   const insertProperty = db.prepare(`INSERT INTO platform_properties
     (id, organization_id, customer_name, address_line_1, city, state, county, postal_code, created_at)
@@ -124,6 +174,24 @@ export function createPlatformStore(filename: string) {
   const insertAvailability = db.prepare(`INSERT INTO provider_availability
     (id, organization_id, weekday, start_time, end_time, urgent) VALUES (?, ?, ?, ?, ?, ?)`)
   const listAvailability = db.prepare('SELECT * FROM provider_availability WHERE organization_id=? ORDER BY weekday, start_time')
+  const upsertProviderControl = db.prepare(`INSERT INTO provider_controls
+    (organization_id, status, license_expires_at, insurance_expires_at, reason, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(organization_id) DO UPDATE SET status=excluded.status, license_expires_at=excluded.license_expires_at,
+      insurance_expires_at=excluded.insurance_expires_at, reason=excluded.reason, updated_at=excluded.updated_at`)
+  const listProviderControls = db.prepare('SELECT * FROM provider_controls ORDER BY updated_at DESC')
+  const insertDispute = db.prepare(`INSERT INTO disputes
+    (id, organization_id, booking_id, category, summary, status, resolution, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'open', NULL, ?, ?)`)
+  const listDisputes = db.prepare('SELECT * FROM disputes ORDER BY created_at DESC')
+  const getDispute = db.prepare('SELECT * FROM disputes WHERE id=?')
+  const updateDispute = db.prepare('UPDATE disputes SET status=?, resolution=?, updated_at=? WHERE id=?')
+  const insertAudit = db.prepare(`INSERT INTO audit_logs
+    (id, actor_user_id, actor_organization_id, actor_role, action, target_type, target_id, metadata_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  const listAudits = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?')
+  const listAllBookings = db.prepare('SELECT * FROM service_bookings ORDER BY created_at DESC')
+  const updateBookingDispatch = db.prepare(`UPDATE service_bookings SET status=?, assigned_provider_id=? WHERE id=?`)
 
   const mapProperty = (row: Record<string, unknown>): PlatformProperty => ({
     id: String(row.id), organizationId: String(row.organization_id), customerName: String(row.customer_name),
@@ -148,6 +216,18 @@ export function createPlatformStore(filename: string) {
   const mapAvailability = (row: Record<string, unknown>): ProviderAvailability => ({
     id: String(row.id), organizationId: String(row.organization_id), weekday: Number(row.weekday),
     startTime: String(row.start_time), endTime: String(row.end_time), urgent: Boolean(row.urgent),
+  })
+  const mapProviderControl = (row: Record<string, unknown>): ProviderControl => ({
+    organizationId: String(row.organization_id), status: String(row.status) as ProviderControl['status'],
+    licenseExpiresAt: row.license_expires_at ? String(row.license_expires_at) : null,
+    insuranceExpiresAt: row.insurance_expires_at ? String(row.insurance_expires_at) : null,
+    reason: String(row.reason), updatedAt: String(row.updated_at),
+  })
+  const mapDispute = (row: Record<string, unknown>): Dispute => ({
+    id: String(row.id), organizationId: String(row.organization_id),
+    bookingId: row.booking_id ? String(row.booking_id) : null, category: String(row.category) as Dispute['category'],
+    summary: String(row.summary), status: String(row.status) as Dispute['status'],
+    resolution: row.resolution ? String(row.resolution) : null, createdAt: String(row.created_at),
   })
 
   return {
@@ -213,6 +293,62 @@ export function createPlatformStore(filename: string) {
     },
     listAvailability(organizationId: string) {
       return (listAvailability.all(organizationId) as Record<string, unknown>[]).map(mapAvailability)
+    },
+    listAllBookings() {
+      return (listAllBookings.all() as Record<string, unknown>[]).map(mapBooking)
+    },
+    dispatchBooking(bookingId: string, providerId: string, safetyReviewed: boolean) {
+      const booking = this.findBooking(bookingId)
+      if (!booking) return { error: 'booking_not_found' as const }
+      if (booking.safetyStop && !safetyReviewed) return { error: 'safety_review_required' as const }
+      updateBookingDispatch.run('assigned', providerId, bookingId)
+      return { booking: this.findBooking(bookingId)! }
+    },
+    setProviderControl(input: Omit<ProviderControl, 'updatedAt'>) {
+      const control = { ...input, updatedAt: new Date().toISOString() }
+      upsertProviderControl.run(control.organizationId, control.status, control.licenseExpiresAt,
+        control.insuranceExpiresAt, control.reason, control.updatedAt)
+      return control
+    },
+    listProviderControls() {
+      return (listProviderControls.all() as Record<string, unknown>[]).map(mapProviderControl)
+    },
+    createDispute(input: Omit<Dispute, 'id' | 'status' | 'resolution' | 'createdAt'>) {
+      if (input.bookingId && !this.findBooking(input.bookingId, input.organizationId)) throw new Error('booking_not_found')
+      const dispute: Dispute = { ...input, id: crypto.randomUUID(), status: 'open', resolution: null, createdAt: new Date().toISOString() }
+      insertDispute.run(dispute.id, dispute.organizationId, dispute.bookingId, dispute.category,
+        dispute.summary, dispute.createdAt, dispute.createdAt)
+      return dispute
+    },
+    listDisputes() {
+      return (listDisputes.all() as Record<string, unknown>[]).map(mapDispute)
+    },
+    transitionDispute(id: string, status: Dispute['status'], resolution?: string) {
+      const row = getDispute.get(id) as Record<string, unknown> | undefined
+      if (!row) return null
+      const current = mapDispute(row)
+      const allowed = current.status === 'open' ? ['investigating', 'resolved'] : current.status === 'investigating' ? ['resolved'] : []
+      if (!allowed.includes(status)) return { error: 'invalid_transition' as const, dispute: current }
+      if (status === 'resolved' && !resolution?.trim()) return { error: 'resolution_required' as const, dispute: current }
+      updateDispute.run(status, resolution?.trim() || null, new Date().toISOString(), id)
+      return { dispute: mapDispute(getDispute.get(id) as Record<string, unknown>) }
+    },
+    appendAudit(input: {
+      actorUserId: string; actorOrganizationId: string; actorRole: string; action: string;
+      targetType: string; targetId: string; metadata?: Record<string, unknown>
+    }) {
+      const audit = { id: crypto.randomUUID(), ...input, createdAt: new Date().toISOString() }
+      insertAudit.run(audit.id, audit.actorUserId, audit.actorOrganizationId, audit.actorRole, audit.action,
+        audit.targetType, audit.targetId, JSON.stringify(input.metadata ?? {}), audit.createdAt)
+      return audit
+    },
+    listAudits(limit = 100) {
+      return (listAudits.all(Math.min(500, Math.max(1, limit))) as Record<string, unknown>[]).map((row) => ({
+        id: String(row.id), actorUserId: String(row.actor_user_id), actorOrganizationId: String(row.actor_organization_id),
+        actorRole: String(row.actor_role), action: String(row.action), targetType: String(row.target_type),
+        targetId: String(row.target_id), metadata: JSON.parse(String(row.metadata_json)) as Record<string, unknown>,
+        createdAt: String(row.created_at),
+      }))
     },
     close() { db.close() },
   }

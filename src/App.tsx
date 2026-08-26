@@ -63,6 +63,15 @@ type ProviderWorkOrder = {
   customerName?: string
   propertyAddress?: string
 }
+type AdminBooking = HomeownerBooking & { organizationId: string; symptomSummary: string; assignedProviderId: string | null }
+type AdminDispute = { id: string; organizationId: string; category: string; summary: string; status: string; resolution: string | null }
+type AdminOperations = {
+  bookings: AdminBooking[]
+  disputes: AdminDispute[]
+  providerControls: { organizationId: string; status: string; reason: string }[]
+  auditLogs: { id: string; action: string; targetType: string; targetId: string; createdAt: string }[]
+  queues: { safetyReview: number; unassigned: number }
+}
 const demoHomeCareTeam: HomeCareTeam = {
   propertyId: 'charlotte-home',
   coordinatorId: 'coordinator-1',
@@ -105,6 +114,15 @@ function App() {
   })
   const [availabilityDraft, setAvailabilityDraft] = useState({ weekday: '1', startTime: '08:00', endTime: '17:00', urgent: true })
   const [providerMessage, setProviderMessage] = useState('')
+  const [adminOperations, setAdminOperations] = useState<AdminOperations>({
+    bookings: [], disputes: [], providerControls: [], auditLogs: [], queues: { safetyReview: 0, unassigned: 0 },
+  })
+  const [integrationStatus, setIntegrationStatus] = useState<Record<string, { configured: boolean; humanActionRequired?: boolean; productionReady?: boolean }>>({})
+  const [providerControlDraft, setProviderControlDraft] = useState({
+    organizationId: 'provider-org', status: 'pending', reason: 'Pending document verification',
+  })
+  const [dispatchProviderId, setDispatchProviderId] = useState('provider-1')
+  const [adminMessage, setAdminMessage] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
@@ -198,6 +216,24 @@ function App() {
     }).catch(() => setHomeownerMessage('Home data could not be loaded.'))
   }, [portalSession])
 
+  const refreshAdminOperations = async () => {
+    const [operationsResponse, integrationsResponse] = await Promise.all([
+      fetch('/api/admin/operations'), fetch('/api/admin/integrations'),
+    ])
+    if (!operationsResponse.ok || !integrationsResponse.ok) {
+      setAdminMessage('Operations data could not be loaded.')
+      return
+    }
+    setAdminOperations(await operationsResponse.json() as AdminOperations)
+    const integrationResult = await integrationsResponse.json() as { integrations: typeof integrationStatus }
+    setIntegrationStatus(integrationResult.integrations)
+  }
+
+  useEffect(() => {
+    if (portalSession?.role !== 'admin') return
+    queueMicrotask(() => { void refreshAdminOperations() })
+  }, [portalSession])
+
   useEffect(() => {
     if (portalSession?.role !== 'provider') return
     Promise.all([
@@ -230,6 +266,14 @@ function App() {
     setAccessCode('')
     setPortalSession(result.session)
     setSession('authenticated')
+  }
+
+  const logout = async () => {
+    await fetch('/api/session', { method: 'DELETE' })
+    setPortalSession(null)
+    setSession('anonymous')
+    setEmail('')
+    setAccessCode('')
   }
 
   const toggleEvidence = (label: string) => {
@@ -442,6 +486,38 @@ function App() {
     setProviderMessage(response.ok ? 'Availability published.' : result.error === 'availability_conflict' ? 'That availability window already exists.' : 'Availability could not be saved.')
   }
 
+  const dispatchAdminBooking = async (bookingId: string, safetyReviewed: boolean) => {
+    const response = await fetch(`/api/admin/bookings/${bookingId}/dispatch`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ providerId: dispatchProviderId, safetyReviewed }),
+    })
+    const result = await response.json() as { error?: string }
+    setAdminMessage(response.ok ? 'Booking assigned and audited.' : result.error === 'safety_review_required' ? 'Complete the human safety review before dispatch.' : 'Dispatch failed.')
+    if (response.ok) await refreshAdminOperations()
+  }
+
+  const saveProviderControl = async (event: FormEvent) => {
+    event.preventDefault()
+    const response = await fetch('/api/admin/provider-controls', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...providerControlDraft, licenseExpiresAt: null, insuranceExpiresAt: null,
+      }),
+    })
+    setAdminMessage(response.ok ? 'Provider status updated and audited.' : 'Provider status could not be updated.')
+    if (response.ok) await refreshAdminOperations()
+  }
+
+  const advanceDispute = async (dispute: AdminDispute) => {
+    const nextStatus = dispute.status === 'open' ? 'investigating' : 'resolved'
+    const response = await fetch(`/api/admin/disputes/${dispute.id}/${nextStatus}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(nextStatus === 'resolved' ? { resolution: 'Operator documented resolution and notified the homeowner.' } : {}),
+    })
+    setAdminMessage(response.ok ? `Dispute moved to ${nextStatus}.` : 'Dispute could not be updated.')
+    if (response.ok) await refreshAdminOperations()
+  }
+
   if (session !== 'authenticated') {
     return (
       <main className="login-shell">
@@ -469,6 +545,7 @@ function App() {
         <nav className="portal-nav" aria-label="Current portal">
           <span>{portalSession?.displayName ?? 'Authenticated user'}</span>
           <b>{portalSession?.role ?? 'admin'}</b>
+          <button type="button" onClick={logout}>Sign out</button>
         </nav>
         <div className="status"><i /> {portalSession?.role === 'homeowner' ? 'Home care active' : portalSession?.role === 'provider' ? 'Provider workspace live' : 'Operations online'}</div>
       </header>
@@ -581,6 +658,57 @@ function App() {
             </div>
           </div>
           {providerMessage && <p className="workspace-message" role="status">{providerMessage}</p>}
+        </section>
+      )}
+
+      {portalSession?.role === 'admin' && (
+        <section className="role-workspace" aria-labelledby="admin-workspace-title">
+          <div className="workspace-heading">
+            <p className="eyebrow">ADMIN CONTROL CENTER</p>
+            <h2 id="admin-workspace-title">Review safety. Dispatch deliberately. Keep an audit trail.</h2>
+            <p>Danger signals remain outside automated pricing and normal booking until a human records review.</p>
+          </div>
+          <div className="workspace-metrics">
+            <div><span>Safety review queue</span><strong>{adminOperations.queues.safetyReview}</strong></div>
+            <div><span>Unassigned requests</span><strong>{adminOperations.queues.unassigned}</strong></div>
+            <div><span>Open disputes</span><strong>{adminOperations.disputes.filter((dispute) => dispute.status !== 'resolved').length}</strong></div>
+          </div>
+          <div className="workspace-grid">
+            <div className="workspace-card booking-list">
+              <h3>Dispatch queue</h3>
+              <label>Provider ID<input value={dispatchProviderId} onChange={(event) => setDispatchProviderId(event.target.value)} /></label>
+              {adminOperations.bookings.filter((booking) => ['requested', 'human_review'].includes(booking.status)).map((booking) => (
+                <article key={booking.id}>
+                  <div><strong>{booking.symptomSummary}</strong><b>{booking.status}</b></div>
+                  <p>{booking.service.replaceAll('_', ' ')} · {booking.organizationId}</p>
+                  <button onClick={() => dispatchAdminBooking(booking.id, booking.status === 'human_review')}>{booking.status === 'human_review' ? 'Record safety review & assign' : 'Assign provider'}</button>
+                </article>
+              ))}
+              {adminOperations.bookings.length === 0 && <p className="empty-state">No booking activity.</p>}
+            </div>
+            <form className="workspace-card" onSubmit={saveProviderControl}>
+              <h3>Provider control</h3>
+              <label>Provider organization<input value={providerControlDraft.organizationId} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, organizationId: event.target.value })} /></label>
+              <label>Status<select value={providerControlDraft.status} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, status: event.target.value })}><option value="pending">Pending</option><option value="approved">Approved</option><option value="suspended">Suspended</option></select></label>
+              <label>Reason<textarea value={providerControlDraft.reason} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, reason: event.target.value })} /></label>
+              <button type="submit">Update provider status</button>
+              <div className="compact-list">{adminOperations.providerControls.map((control) => <p key={control.organizationId}><span>{control.organizationId}</span><b>{control.status}</b></p>)}</div>
+            </form>
+            <div className="workspace-card booking-list">
+              <h3>Disputes and refunds</h3>
+              {adminOperations.disputes.length === 0 ? <p className="empty-state">No disputes filed.</p> : adminOperations.disputes.map((dispute) => (
+                <article key={dispute.id}><div><strong>{dispute.summary}</strong><b>{dispute.status}</b></div><p>{dispute.category} · {dispute.organizationId}</p>{dispute.status !== 'resolved' && <button onClick={() => advanceDispute(dispute)}>{dispute.status === 'open' ? 'Start investigation' : 'Record resolution'}</button>}</article>
+              ))}
+            </div>
+          </div>
+          <div className="integration-grid">
+            {Object.entries(integrationStatus).map(([name, status]) => <article key={name}><span>{name}</span><b className={status.configured ? 'ready' : 'blocked'}>{status.configured ? 'configured' : 'human action required'}</b></article>)}
+          </div>
+          <div className="workspace-card audit-list">
+            <h3>Recent audit log</h3>
+            {adminOperations.auditLogs.slice(0, 8).map((entry) => <p key={entry.id}><time>{new Date(entry.createdAt).toLocaleString()}</time><span>{entry.action}</span><code>{entry.targetType}:{entry.targetId}</code></p>)}
+          </div>
+          {adminMessage && <p className="workspace-message" role="status">{adminMessage}</p>}
         </section>
       )}
 

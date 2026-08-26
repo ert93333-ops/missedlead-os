@@ -171,11 +171,37 @@ describe('authentication', () => {
     expect(safetyBooking.body.booking).toMatchObject({
       status: 'human_review', safetyStop: true, estimateLowCents: null, estimateHighCents: null,
     })
+    const dispute = await owner.post('/api/homeowner/disputes').send({
+      bookingId: booking.body.booking.id, category: 'quality', summary: 'Return visit requested',
+    }).expect(201)
 
     const other = request.agent(app)
     await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
     await other.post('/api/homeowner/bookings').send({ ...bookingInput, preferredStart: '2026-09-02T14:00:00.000Z' })
       .expect(404, { error: 'property_not_found' })
+
+    const admin = request.agent(app)
+    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
+    await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
+      .send({ providerId: 'provider-1', safetyReviewed: false }).expect(409, { error: 'safety_review_required' })
+    await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
+      .send({ providerId: 'provider-1', safetyReviewed: true }).expect(200)
+    await admin.post('/api/admin/provider-controls').send({
+      organizationId: 'provider-org', status: 'suspended', licenseExpiresAt: null,
+      insuranceExpiresAt: null, reason: 'Insurance verification expired',
+    }).expect(200)
+    await admin.post(`/api/admin/disputes/${dispute.body.dispute.id}/investigating`).send({}).expect(200)
+    await admin.post(`/api/admin/disputes/${dispute.body.dispute.id}/resolved`)
+      .send({ resolution: 'No-charge return visit assigned' }).expect(200)
+    const operations = await admin.get('/api/admin/operations').expect(200)
+    expect(operations.body).toMatchObject({
+      queues: { safetyReview: 0, unassigned: 1 },
+      providerControls: [expect.objectContaining({ organizationId: 'provider-org', status: 'suspended' })],
+    })
+    expect(operations.body.auditLogs.map((entry: { action: string }) => entry.action))
+      .toEqual(expect.arrayContaining(['booking.dispatched', 'provider.suspended', 'dispute.resolved']))
+    const integrations = await admin.get('/api/admin/integrations').expect(200)
+    expect(integrations.body.integrations.payments).toEqual({ configured: false, humanActionRequired: true })
   })
 
   it('keeps provider pricebooks and availability inside the provider organization', async () => {

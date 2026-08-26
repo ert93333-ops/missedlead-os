@@ -54,4 +54,38 @@ describe('platform homeowner data', () => {
     expect(store.createAvailability(availability)).toEqual({ error: 'availability_conflict' })
     expect(store.listAvailability('provider-org')).toHaveLength(1)
   })
+
+  it('requires safety review for dispatch and records disputes, controls, and audits', () => {
+    const property = store.createProperty({
+      organizationId: 'household-1', customerName: 'Home Owner', addressLine1: '1200 South Blvd',
+      city: 'Charlotte', state: 'NC', county: 'Mecklenburg', postalCode: '28210',
+    })
+    const created = store.createBooking({
+      organizationId: 'household-1', propertyId: property.id, service: 'hvac_service',
+      preferredStart: '2026-09-04T14:00:00.000Z', safetyStop: true, symptomSummary: 'Burning odor',
+      estimateLowCents: null, estimateHighCents: null,
+    })
+    if (!('booking' in created)) throw new Error('booking not created')
+    expect(store.dispatchBooking(created.booking.id, 'provider-1', false)).toEqual({ error: 'safety_review_required' })
+    expect(store.dispatchBooking(created.booking.id, 'provider-1', true)).toMatchObject({ booking: { status: 'assigned', assignedProviderId: 'provider-1' } })
+
+    expect(store.setProviderControl({
+      organizationId: 'provider-org', status: 'suspended', licenseExpiresAt: null,
+      insuranceExpiresAt: null, reason: 'Insurance verification expired',
+    })).toMatchObject({ status: 'suspended' })
+    expect(store.listProviderControls()).toHaveLength(1)
+
+    const dispute = store.createDispute({
+      organizationId: 'household-1', bookingId: created.booking.id, category: 'quality', summary: 'Return visit requested',
+    })
+    expect(store.transitionDispute(dispute.id, 'resolved')).toMatchObject({ error: 'resolution_required' })
+    expect(store.transitionDispute(dispute.id, 'investigating')).toMatchObject({ dispute: { status: 'investigating' } })
+    expect(store.transitionDispute(dispute.id, 'resolved', 'Assigned a no-charge return visit')).toMatchObject({ dispute: { status: 'resolved' } })
+
+    store.appendAudit({
+      actorUserId: 'admin-1', actorOrganizationId: 'platform', actorRole: 'admin',
+      action: 'provider.suspended', targetType: 'provider_organization', targetId: 'provider-org',
+    })
+    expect(store.listAudits()).toEqual([expect.objectContaining({ action: 'provider.suspended', targetId: 'provider-org' })])
+  })
 })

@@ -183,6 +183,18 @@ const availabilitySchema = z.object({
   message: 'End time must be after start time',
   path: ['endTime'],
 })
+const disputeSchema = z.object({
+  bookingId: z.string().uuid().optional(),
+  category: z.enum(['refund', 'quality', 'safety', 'billing']),
+  summary: z.string().trim().min(1).max(1000),
+})
+const providerControlSchema = z.object({
+  organizationId: z.string().trim().min(1).max(120),
+  status: z.enum(['pending', 'approved', 'suspended']),
+  licenseExpiresAt: z.iso.datetime().nullable(),
+  insuranceExpiresAt: z.iso.datetime().nullable(),
+  reason: z.string().trim().min(1).max(500),
+})
 
 function presentCase(serviceCase: ReturnType<CaseStore['create']>) {
   const estimate = buildEstimate(serviceCase.evidence, serviceCase.summary)
@@ -313,6 +325,27 @@ export function createApp(store: CaseStore, options: {
     }
     response.json({ bookings: options.platform.listBookings(response.locals.authSession.organizationId) })
   })
+  app.post('/api/homeowner/disputes', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = disputeSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_dispute', issues: parsed.error.issues })
+      return
+    }
+    try {
+      const dispute = options.platform.createDispute({
+        ...parsed.data,
+        bookingId: parsed.data.bookingId ?? null,
+        organizationId: response.locals.authSession.organizationId,
+      })
+      response.status(201).json({ dispute })
+    } catch {
+      response.status(404).json({ error: 'booking_not_found' })
+    }
+  })
   app.use('/api/provider', auth.requireRole('provider', 'admin'))
   app.post('/api/provider/pricebook', (request, response) => {
     if (!options.platform) {
@@ -376,6 +409,120 @@ export function createApp(store: CaseStore, options: {
         completedJobs: completed.length,
         grossRevenueCents: completed.reduce((total, workOrder) => total + (workOrder.finalOutcome?.finalPriceCents ?? 0), 0),
       },
+    })
+  })
+  app.use('/api/admin', auth.requireRole('admin'))
+  app.get('/api/admin/operations', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const bookings = options.platform.listAllBookings()
+    response.json({
+      bookings,
+      disputes: options.platform.listDisputes(),
+      providerControls: options.platform.listProviderControls(),
+      auditLogs: options.platform.listAudits(100),
+      queues: {
+        safetyReview: bookings.filter((booking) => booking.status === 'human_review').length,
+        unassigned: bookings.filter((booking) => booking.status === 'requested').length,
+      },
+    })
+  })
+  app.post('/api/admin/bookings/:id/dispatch', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = z.object({ providerId: z.string().min(1), safetyReviewed: z.boolean() }).safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_dispatch', issues: parsed.error.issues })
+      return
+    }
+    const result = options.platform.dispatchBooking(request.params.id, parsed.data.providerId, parsed.data.safetyReviewed)
+    if ('error' in result) {
+      response.status(result.error === 'booking_not_found' ? 404 : 409).json({ error: result.error })
+      return
+    }
+    options.platform.appendAudit({
+      actorUserId: response.locals.authSession.id,
+      actorOrganizationId: response.locals.authSession.organizationId,
+      actorRole: response.locals.authSession.role,
+      action: 'booking.dispatched',
+      targetType: 'booking',
+      targetId: request.params.id,
+      metadata: { providerId: parsed.data.providerId, safetyReviewed: parsed.data.safetyReviewed },
+    })
+    response.json(result)
+  })
+  app.post('/api/admin/provider-controls', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = providerControlSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_provider_control', issues: parsed.error.issues })
+      return
+    }
+    const control = options.platform.setProviderControl(parsed.data)
+    options.platform.appendAudit({
+      actorUserId: response.locals.authSession.id,
+      actorOrganizationId: response.locals.authSession.organizationId,
+      actorRole: response.locals.authSession.role,
+      action: `provider.${control.status}`,
+      targetType: 'provider_organization',
+      targetId: control.organizationId,
+      metadata: { reason: control.reason },
+    })
+    response.json({ control })
+  })
+  app.post('/api/admin/disputes/:id/:status', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = z.object({
+      status: z.enum(['investigating', 'resolved']),
+      resolution: z.string().trim().max(1000).optional(),
+    }).safeParse({ ...request.body, status: request.params.status })
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_dispute_transition', issues: parsed.error.issues })
+      return
+    }
+    const result = options.platform.transitionDispute(request.params.id, parsed.data.status, parsed.data.resolution)
+    if (!result) {
+      response.status(404).json({ error: 'dispute_not_found' })
+      return
+    }
+    if ('error' in result) {
+      response.status(409).json({ error: result.error })
+      return
+    }
+    options.platform.appendAudit({
+      actorUserId: response.locals.authSession.id,
+      actorOrganizationId: response.locals.authSession.organizationId,
+      actorRole: response.locals.authSession.role,
+      action: `dispute.${parsed.data.status}`,
+      targetType: 'dispute',
+      targetId: request.params.id,
+    })
+    response.json(result)
+  })
+  app.get('/api/admin/integrations', (_request, response) => {
+    response.json({
+      integrations: {
+        twilio: { configured: Boolean(options.twilio), humanActionRequired: !options.twilio },
+        multimodal: { configured: Boolean(options.multimodal), humanActionRequired: !options.multimodal },
+        evidenceStorage: { configured: Boolean(options.evidenceStorage), productionReady: false },
+        payments: { configured: false, humanActionRequired: true },
+      },
+      productionBlockers: [
+        'Provision and verify the production Twilio account and phone number.',
+        'Configure a production object-storage provider and retention policy.',
+        'Connect a payment processor and complete merchant verification.',
+        'Deploy behind HTTPS with backups, monitoring, and a managed secret store.',
+      ],
     })
   })
 

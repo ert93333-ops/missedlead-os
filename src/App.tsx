@@ -44,6 +44,25 @@ type HomeownerBooking = {
   estimateLowCents: number | null
   estimateHighCents: number | null
 }
+type ProviderPricebookItem = {
+  id: string
+  service: string
+  label: string
+  baseFeeCents: number
+  laborLowCents: number
+  laborHighCents: number
+  active: boolean
+}
+type ProviderWorkOrder = {
+  id: string
+  service: string
+  summary: string
+  status: string
+  scheduledAt: string | null
+  finalOutcome: null | { finalPriceCents: number; outcome: string; aiAssessmentOutcome: string }
+  customerName?: string
+  propertyAddress?: string
+}
 const demoHomeCareTeam: HomeCareTeam = {
   propertyId: 'charlotte-home',
   coordinatorId: 'coordinator-1',
@@ -78,6 +97,14 @@ function App() {
     safetyStop: false, squareFeet: '2200', bathrooms: '2', frequency: 'biweekly', deepClean: false, pets: false,
   })
   const [homeownerMessage, setHomeownerMessage] = useState('')
+  const [providerPricebook, setProviderPricebook] = useState<ProviderPricebookItem[]>([])
+  const [providerWorkOrders, setProviderWorkOrders] = useState<ProviderWorkOrder[]>([])
+  const [providerEarnings, setProviderEarnings] = useState({ completedJobs: 0, grossRevenueCents: 0 })
+  const [pricebookDraft, setPricebookDraft] = useState({
+    service: 'hvac_service', label: 'Diagnostic visit', baseFee: '89', laborLow: '90', laborHigh: '290',
+  })
+  const [availabilityDraft, setAvailabilityDraft] = useState({ weekday: '1', startTime: '08:00', endTime: '17:00', urgent: true })
+  const [providerMessage, setProviderMessage] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
@@ -169,6 +196,19 @@ function App() {
       setHomeownerBookings((bookingsResult as { bookings: HomeownerBooking[] }).bookings)
       if (properties[0]) setBookingDraft((draft) => ({ ...draft, propertyId: draft.propertyId || properties[0].id }))
     }).catch(() => setHomeownerMessage('Home data could not be loaded.'))
+  }, [portalSession])
+
+  useEffect(() => {
+    if (portalSession?.role !== 'provider') return
+    Promise.all([
+      fetch('/api/provider/pricebook').then((response) => response.ok ? response.json() : { items: [] }),
+      fetch('/api/provider/work-orders').then((response) => response.ok ? response.json() : { workOrders: [], earnings: { completedJobs: 0, grossRevenueCents: 0 } }),
+    ]).then(([pricebookResult, workOrderResult]) => {
+      setProviderPricebook((pricebookResult as { items: ProviderPricebookItem[] }).items)
+      const workData = workOrderResult as { workOrders: ProviderWorkOrder[]; earnings: typeof providerEarnings }
+      setProviderWorkOrders(workData.workOrders)
+      setProviderEarnings(workData.earnings)
+    }).catch(() => setProviderMessage('Provider workspace could not be loaded.'))
   }, [portalSession])
 
   const login = async (event: FormEvent) => {
@@ -368,6 +408,40 @@ function App() {
       : 'Service request submitted with a preliminary price range.')
   }
 
+  const createPricebookItem = async (event: FormEvent) => {
+    event.preventDefault()
+    const response = await fetch('/api/provider/pricebook', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        service: pricebookDraft.service, label: pricebookDraft.label,
+        baseFeeCents: Math.round(Number(pricebookDraft.baseFee) * 100),
+        laborLowCents: Math.round(Number(pricebookDraft.laborLow) * 100),
+        laborHighCents: Math.round(Number(pricebookDraft.laborHigh) * 100),
+        active: true,
+      }),
+    })
+    const result = await response.json() as { item?: ProviderPricebookItem; error?: string }
+    if (!response.ok || !result.item) {
+      setProviderMessage(result.error ?? 'Pricebook item could not be saved.')
+      return
+    }
+    setProviderPricebook((items) => [result.item!, ...items])
+    setProviderMessage('Contractor pricebook updated.')
+  }
+
+  const createProviderAvailability = async (event: FormEvent) => {
+    event.preventDefault()
+    const response = await fetch('/api/provider/availability', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        weekday: Number(availabilityDraft.weekday), startTime: availabilityDraft.startTime,
+        endTime: availabilityDraft.endTime, urgent: availabilityDraft.urgent,
+      }),
+    })
+    const result = await response.json() as { error?: string }
+    setProviderMessage(response.ok ? 'Availability published.' : result.error === 'availability_conflict' ? 'That availability window already exists.' : 'Availability could not be saved.')
+  }
+
   if (session !== 'authenticated') {
     return (
       <main className="login-shell">
@@ -462,6 +536,51 @@ function App() {
             </div>
           </div>
           {homeownerMessage && <p className="workspace-message" role="status">{homeownerMessage}</p>}
+        </section>
+      )}
+
+      {portalSession?.role === 'provider' && (
+        <section className="role-workspace" aria-labelledby="provider-workspace-title">
+          <div className="workspace-heading">
+            <p className="eyebrow">PROVIDER BUSINESS OS</p>
+            <h2 id="provider-workspace-title">Price work clearly. Control availability. Close the feedback loop.</h2>
+            <p>Only completed repair revenue generates a platform fee; unbooked leads remain free.</p>
+          </div>
+          <div className="workspace-metrics">
+            <div><span>Completed jobs</span><strong>{providerEarnings.completedJobs}</strong></div>
+            <div><span>Recorded gross revenue</span><strong>${providerEarnings.grossRevenueCents / 100}</strong></div>
+            <div><span>Open work</span><strong>{providerWorkOrders.filter((workOrder) => !['completed', 'cancelled'].includes(workOrder.status)).length}</strong></div>
+          </div>
+          <div className="workspace-grid">
+            <form className="workspace-card" onSubmit={createPricebookItem}>
+              <h3>Contractor pricebook</h3>
+              <label>Service<select value={pricebookDraft.service} onChange={(event) => setPricebookDraft({ ...pricebookDraft, service: event.target.value })}>
+                <option value="hvac_service">HVAC</option><option value="plumbing_service">Plumbing</option>
+                <option value="recurring_cleaning">Cleaning</option><option value="handyman_visit">Handyman</option>
+              </select></label>
+              <label>Line item<input required value={pricebookDraft.label} onChange={(event) => setPricebookDraft({ ...pricebookDraft, label: event.target.value })} /></label>
+              <div className="field-row">
+                <label>Dispatch $<input type="number" min="0" value={pricebookDraft.baseFee} onChange={(event) => setPricebookDraft({ ...pricebookDraft, baseFee: event.target.value })} /></label>
+                <label>Labor range $<span className="inline-inputs"><input type="number" min="0" value={pricebookDraft.laborLow} onChange={(event) => setPricebookDraft({ ...pricebookDraft, laborLow: event.target.value })} /><input type="number" min="0" value={pricebookDraft.laborHigh} onChange={(event) => setPricebookDraft({ ...pricebookDraft, laborHigh: event.target.value })} /></span></label>
+              </div>
+              <button type="submit">Save pricebook item</button>
+              <div className="compact-list">{providerPricebook.map((item) => <p key={item.id}><span>{item.label}</span><b>${item.baseFeeCents / 100} + ${item.laborLowCents / 100}–${item.laborHighCents / 100}</b></p>)}</div>
+            </form>
+            <form className="workspace-card" onSubmit={createProviderAvailability}>
+              <h3>Availability</h3>
+              <label>Weekday<select value={availabilityDraft.weekday} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, weekday: event.target.value })}>
+                {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}
+              </select></label>
+              <div className="field-row"><label>Start<input type="time" value={availabilityDraft.startTime} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, startTime: event.target.value })} /></label><label>End<input type="time" value={availabilityDraft.endTime} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, endTime: event.target.value })} /></label></div>
+              <label className="safety-check"><input type="checkbox" checked={availabilityDraft.urgent} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, urgent: event.target.checked })} /> Available for urgent dispatch coordination</label>
+              <button type="submit">Publish availability</button>
+            </form>
+            <div className="workspace-card booking-list">
+              <h3>Assigned work</h3>
+              {providerWorkOrders.length === 0 ? <p className="empty-state">No assigned work orders.</p> : providerWorkOrders.map((workOrder) => <article key={workOrder.id}><div><strong>{workOrder.customerName ?? workOrder.summary}</strong><b>{workOrder.status}</b></div><p>{workOrder.propertyAddress ?? workOrder.summary}</p><p>{workOrder.service.replaceAll('_', ' ')}</p></article>)}
+            </div>
+          </div>
+          {providerMessage && <p className="workspace-message" role="status">{providerMessage}</p>}
         </section>
       )}
 

@@ -65,6 +65,8 @@ export type WorkOrder = {
     aiAssessmentOutcome: 'accepted' | 'corrected' | 'rejected'
   }
   createdAt: string
+  customerName?: string
+  propertyAddress?: string
 }
 
 export function createMaintenanceStore(filename: string) {
@@ -241,6 +243,11 @@ export function createMaintenanceStore(filename: string) {
     VALUES (?, ?, ?, ?, ?, ?, 'offered', NULL, NULL, ?, ?)`)
   const getWorkOrder = db.prepare('SELECT * FROM work_orders WHERE id=?')
   const listWorkOrders = db.prepare('SELECT * FROM work_orders WHERE plan_id=? ORDER BY created_at DESC')
+  const listProviderWorkOrders = db.prepare(`SELECT w.*, r.customer_name, r.address FROM work_orders w
+    JOIN service_providers p ON p.id=w.provider_id
+    JOIN maintenance_plans m ON m.id=w.plan_id
+    JOIN properties r ON r.id=m.property_id
+    WHERE p.owner_organization_id=? ORDER BY w.created_at DESC`)
   const updateWorkOrderStatus = db.prepare('UPDATE work_orders SET status=?, scheduled_at=?, final_outcome_json=?, updated_at=? WHERE id=?')
   const deleteWorkOrders = db.prepare('DELETE FROM work_orders WHERE plan_id=?')
 
@@ -304,6 +311,8 @@ export function createMaintenanceStore(filename: string) {
     scheduledAt: row.scheduled_at ? String(row.scheduled_at) : null,
     finalOutcome: row.final_outcome_json ? JSON.parse(String(row.final_outcome_json)) as NonNullable<WorkOrder['finalOutcome']> : null,
     createdAt: String(row.created_at),
+    ...(row.customer_name ? { customerName: String(row.customer_name) } : {}),
+    ...(row.address ? { propertyAddress: String(row.address) } : {}),
   })
 
   const createMembership = db.transaction((input: {
@@ -498,6 +507,9 @@ export function createMaintenanceStore(filename: string) {
     },
     listWorkOrders(planId: string) {
       return findMembership(planId) ? (listWorkOrders.all(planId) as Record<string, unknown>[]).map(mapWorkOrder) : null
+    },
+    listProviderWorkOrders(ownerOrganizationId: string) {
+      return (listProviderWorkOrders.all(ownerOrganizationId) as Record<string, unknown>[]).map(mapWorkOrder)
     },
     findWorkOrder(workOrderId: string) {
       const row = getWorkOrder.get(workOrderId) as Record<string, unknown> | undefined

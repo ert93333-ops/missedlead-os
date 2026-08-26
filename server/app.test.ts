@@ -177,6 +177,30 @@ describe('authentication', () => {
     await other.post('/api/homeowner/bookings').send({ ...bookingInput, preferredStart: '2026-09-02T14:00:00.000Z' })
       .expect(404, { error: 'property_not_found' })
   })
+
+  it('keeps provider pricebooks and availability inside the provider organization', async () => {
+    const app = createApp(store, { auth: roleAuth, platform, maintenance })
+    const provider = request.agent(app)
+    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
+    await provider.post('/api/provider/pricebook').send({
+      service: 'hvac_service', label: 'Diagnostic visit', baseFeeCents: 8900,
+      laborLowCents: 9000, laborHighCents: 29000, active: true,
+    }).expect(201)
+    await provider.post('/api/provider/availability').send({
+      weekday: 1, startTime: '08:00', endTime: '17:00', urgent: true,
+    }).expect(201)
+    await provider.post('/api/provider/availability').send({
+      weekday: 1, startTime: '08:00', endTime: '17:00', urgent: true,
+    }).expect(409, { error: 'availability_conflict' })
+    expect((await provider.get('/api/provider/pricebook').expect(200)).body.items).toHaveLength(1)
+    expect((await provider.get('/api/provider/availability').expect(200)).body.availability).toHaveLength(1)
+    expect((await provider.get('/api/provider/work-orders').expect(200)).body.earnings)
+      .toEqual({ completedJobs: 0, grossRevenueCents: 0 })
+
+    const owner = request.agent(app)
+    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
+    await owner.get('/api/provider/pricebook').expect(403, { error: 'insufficient_role' })
+  })
 })
 
 describe('jurisdiction API', () => {

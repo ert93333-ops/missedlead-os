@@ -163,6 +163,26 @@ const bookingSchema = z.object({
     pets: z.boolean(),
   }).optional(),
 })
+const pricebookItemSchema = z.object({
+  service: z.enum(['recurring_cleaning', 'home_care_visit', 'hvac_service', 'plumbing_service', 'handyman_visit']),
+  label: z.string().trim().min(1).max(160),
+  baseFeeCents: z.number().int().min(0).max(10_000_000),
+  laborLowCents: z.number().int().min(0).max(10_000_000),
+  laborHighCents: z.number().int().min(0).max(10_000_000),
+  active: z.boolean(),
+}).refine((input) => input.laborHighCents >= input.laborLowCents, {
+  message: 'Labor high must be greater than or equal to labor low',
+  path: ['laborHighCents'],
+})
+const availabilitySchema = z.object({
+  weekday: z.number().int().min(0).max(6),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  urgent: z.boolean(),
+}).refine((input) => input.endTime > input.startTime, {
+  message: 'End time must be after start time',
+  path: ['endTime'],
+})
 
 function presentCase(serviceCase: ReturnType<CaseStore['create']>) {
   const estimate = buildEstimate(serviceCase.evidence, serviceCase.summary)
@@ -292,6 +312,71 @@ export function createApp(store: CaseStore, options: {
       return
     }
     response.json({ bookings: options.platform.listBookings(response.locals.authSession.organizationId) })
+  })
+  app.use('/api/provider', auth.requireRole('provider', 'admin'))
+  app.post('/api/provider/pricebook', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = pricebookItemSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_pricebook_item', issues: parsed.error.issues })
+      return
+    }
+    response.status(201).json({ item: options.platform.createPricebookItem({
+      ...parsed.data,
+      organizationId: response.locals.authSession.organizationId,
+    }) })
+  })
+  app.get('/api/provider/pricebook', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    response.json({ items: options.platform.listPricebookItems(response.locals.authSession.organizationId) })
+  })
+  app.post('/api/provider/availability', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = availabilitySchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_availability', issues: parsed.error.issues })
+      return
+    }
+    const result = options.platform.createAvailability({
+      ...parsed.data,
+      organizationId: response.locals.authSession.organizationId,
+    })
+    if ('error' in result) {
+      response.status(409).json({ error: result.error })
+      return
+    }
+    response.status(201).json(result)
+  })
+  app.get('/api/provider/availability', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    response.json({ availability: options.platform.listAvailability(response.locals.authSession.organizationId) })
+  })
+  app.get('/api/provider/work-orders', (_request, response) => {
+    if (!options.maintenance) {
+      response.status(503).json({ error: 'maintenance_not_configured' })
+      return
+    }
+    const workOrders = options.maintenance.listProviderWorkOrders(response.locals.authSession.organizationId)
+    const completed = workOrders.filter((workOrder) => workOrder.status === 'completed' && workOrder.finalOutcome)
+    response.json({
+      workOrders,
+      earnings: {
+        completedJobs: completed.length,
+        grossRevenueCents: completed.reduce((total, workOrder) => total + (workOrder.finalOutcome?.finalPriceCents ?? 0), 0),
+      },
+    })
   })
 
   app.post('/api/calls/next', auth.requireSession, (request, response) => {

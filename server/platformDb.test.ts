@@ -37,4 +37,21 @@ describe('platform homeowner data', () => {
     expect(store.createBooking(input)).toMatchObject({ booking: { status: 'human_review', safetyStop: true } })
     expect(store.createBooking(input)).toEqual({ error: 'booking_slot_conflict' })
   })
+
+  it('persists organization-scoped pricebooks and conflict-safe availability', () => {
+    const item = store.createPricebookItem({
+      organizationId: 'provider-org', service: 'hvac_service', label: 'Diagnostic visit',
+      baseFeeCents: 8900, laborLowCents: 9000, laborHighCents: 29000, active: true,
+    })
+    expect(item).toMatchObject({ organizationId: 'provider-org', baseFeeCents: 8900 })
+    expect(store.listPricebookItems('provider-org')).toHaveLength(1)
+    expect(store.listPricebookItems('other-provider')).toEqual([])
+
+    const availability = {
+      organizationId: 'provider-org', weekday: 1, startTime: '08:00', endTime: '17:00', urgent: true,
+    }
+    expect(store.createAvailability(availability)).toMatchObject({ availability: { weekday: 1, urgent: true } })
+    expect(store.createAvailability(availability)).toEqual({ error: 'availability_conflict' })
+    expect(store.listAvailability('provider-org')).toHaveLength(1)
+  })
 })

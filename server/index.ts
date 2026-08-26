@@ -5,6 +5,7 @@ import { createCaseStore } from './db'
 import { createFallbackAnalyzer, createGeminiAnalyzer, createMultimodalAnalyzer } from './multimodal'
 import { createEvidenceStorage } from './evidenceStorage'
 import { createMaintenanceStore } from './maintenanceDb'
+import { createMaintenanceScheduler } from './maintenanceScheduler'
 
 dotenv.config({ path: '.env.local' })
 mkdirSync('data', { recursive: true })
@@ -23,6 +24,10 @@ const multimodal = createFallbackAnalyzer(
 )
 const evidenceStorage = createEvidenceStorage('data/evidence')
 const maintenance = createMaintenanceStore('data/missedlead.db')
+const maintenanceScheduler = createMaintenanceScheduler(maintenance, {
+  intervalMs: Number(process.env.MAINTENANCE_EVALUATION_INTERVAL_MS ?? 6 * 60 * 60 * 1000),
+  runImmediately: true,
+})
 const auth = process.env.APP_ACCESS_CODE && process.env.SESSION_SECRET
   ? {
       accessCode: process.env.APP_ACCESS_CODE,
@@ -35,6 +40,7 @@ const server = createApp(store, { twilio: twilioConfig, multimodal, evidenceStor
 })
 
 function shutdown() {
+  maintenanceScheduler.stop()
   server.close(() => {
     store.close()
     maintenance.close()

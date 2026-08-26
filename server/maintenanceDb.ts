@@ -187,6 +187,7 @@ export function createMaintenanceStore(filename: string) {
     VALUES (?, ?, ?, ?, ?, ?, 'active', ?)`)
   const getPlan = db.prepare(`SELECT p.*, t.name technician_name, t.phone technician_phone, r.customer_name, r.address
     FROM maintenance_plans p JOIN technicians t ON t.id=p.technician_id JOIN properties r ON r.id=p.property_id WHERE p.id=?`)
+  const listActivePlans = db.prepare(`SELECT id FROM maintenance_plans WHERE status='active' ORDER BY created_at ASC`)
   const countVisits = db.prepare(`SELECT COUNT(*) count FROM maintenance_visits WHERE plan_id=? AND substr(completed_at,1,4)=?`)
   const insertVisit = db.prepare('INSERT INTO maintenance_visits (id, plan_id, technician_id, completed_at, notes) VALUES (?, ?, ?, ?, ?)')
   const insertQuote = db.prepare(`INSERT INTO member_repair_quotes (id, plan_id, labor_cents, parts_cents, price_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -330,6 +331,9 @@ export function createMaintenanceStore(filename: string) {
   return {
     createMembership,
     findMembership,
+    listActiveMembershipIds() {
+      return (listActivePlans.all() as { id: string }[]).map((row) => row.id)
+    },
     completeVisit(planId: string, notes: string, completedAt = new Date().toISOString(), technicianId?: string) {
       const plan = findMembership(planId)
       if (!plan) return null

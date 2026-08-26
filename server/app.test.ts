@@ -35,6 +35,17 @@ const validCase = {
   ],
 }
 const testAuth: AuthConfig = { accessCode: 'test-access-code', sessionSecret: 'test-session-secret-that-is-long', secureCookies: false }
+const roleAuth: AuthConfig = {
+  accessCode: 'unused-bootstrap-code',
+  sessionSecret: 'test-session-secret-that-is-long',
+  secureCookies: false,
+  users: [
+    { id: 'home-1', organizationId: 'household-1', email: 'home@example.com', displayName: 'Home Owner', role: 'homeowner', accessCode: 'home-code' },
+    { id: 'home-2', organizationId: 'household-2', email: 'other@example.com', displayName: 'Other Owner', role: 'homeowner', accessCode: 'other-code' },
+    { id: 'provider-1', organizationId: 'provider-org', email: 'pro@example.com', displayName: 'Service Pro', role: 'provider', accessCode: 'pro-code' },
+    { id: 'admin-1', organizationId: 'platform', email: 'admin@example.com', displayName: 'Operator', role: 'admin', accessCode: 'admin-code' },
+  ],
+}
 
 async function authenticatedAgent(options: Parameters<typeof createApp>[1] = {}) {
   const agent = request.agent(createApp(store, { ...options, auth: testAuth }))
@@ -50,6 +61,70 @@ describe('authentication', () => {
 
   it('requires a session for protected APIs', async () => {
     await request(createApp(store, { auth: testAuth })).post('/api/cases').send(validCase).expect(401, { error: 'authentication_required' })
+  })
+
+  it('issues organization-scoped role sessions and denies cross-role access', async () => {
+    const homeowner = request.agent(createApp(store, { auth: roleAuth }))
+    await homeowner.post('/api/session').send({ accessCode: 'home-code' }).expect(400, { error: 'email_required' })
+    const login = await homeowner.post('/api/session').send({ email: 'HOME@example.com', accessCode: 'home-code' }).expect(200)
+    expect(login.body.session).toMatchObject({
+      id: 'home-1', organizationId: 'household-1', role: 'homeowner', email: 'home@example.com',
+    })
+    const session = await homeowner.get('/api/session').expect(200)
+    expect(session.body.session).toMatchObject({ organizationId: 'household-1', role: 'homeowner' })
+    await homeowner.get('/api/homeowner/health').expect(200, { role: 'homeowner' })
+    await homeowner.get('/api/provider/health').expect(403, { error: 'insufficient_role' })
+    await homeowner.get('/api/admin/health').expect(403, { error: 'insufficient_role' })
+
+    const provider = request.agent(createApp(store, { auth: roleAuth }))
+    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
+    await provider.get('/api/provider/health').expect(200, { role: 'provider' })
+    await provider.get('/api/homeowner/health').expect(403, { error: 'insufficient_role' })
+  })
+
+  it('isolates homeowner cases by organization while allowing admin review', async () => {
+    const app = createApp(store, { auth: roleAuth })
+    const owner = request.agent(app)
+    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
+    const created = await owner.post('/api/cases').send(validCase).expect(201)
+    expect(created.body.case.ownerOrganizationId).toBe('household-1')
+
+    const other = request.agent(app)
+    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
+    await other.get(`/api/cases/${created.body.case.id}`).expect(404, { error: 'case_not_found' })
+
+    const admin = request.agent(app)
+    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
+    await admin.get(`/api/cases/${created.body.case.id}`).expect(200)
+  })
+
+  it('isolates maintenance memberships by homeowner organization', async () => {
+    const app = createApp(store, { auth: roleAuth, maintenance })
+    const owner = request.agent(app)
+    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
+    const created = await owner.post('/api/maintenance/memberships').send({
+      technicianName: 'Jordan Lee',
+      technicianPhone: '+17045550199',
+      customerName: 'Home Owner',
+      propertyAddress: '1200 South Blvd, Charlotte, NC',
+      terms: charlottePilotTerms,
+      compliance: {
+        jurisdiction: 'NC',
+        legalMode: 'scheduled_maintenance',
+        contractorLicenseVerified: true,
+        serviceContractRegistrationVerified: false,
+      },
+      initialRepairCreditCents: 0,
+    }).expect(201)
+    expect(created.body.membership.ownerOrganizationId).toBe('household-1')
+
+    const other = request.agent(app)
+    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
+    await other.get(`/api/maintenance/memberships/${created.body.membership.id}`).expect(404, { error: 'membership_not_found' })
+
+    const admin = request.agent(app)
+    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
+    await admin.get(`/api/maintenance/memberships/${created.body.membership.id}`).expect(200)
   })
 })
 
@@ -255,10 +330,12 @@ describe('maintenance membership API', () => {
     }).expect(201)
     const membershipId = created.body.membership.id
     const assignedProvider = await app.post('/api/maintenance/providers').send({
+      ownerOrganizationId: 'provider-org',
       name: 'Assigned HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
       licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     }).expect(201)
     const backupProvider = await app.post('/api/maintenance/providers').send({
+      ownerOrganizationId: 'backup-org',
       name: 'Backup HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
       licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     }).expect(201)

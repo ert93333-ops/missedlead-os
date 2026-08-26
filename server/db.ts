@@ -3,6 +3,7 @@ import type { Evidence } from '../src/domain'
 
 export type StoredCase = {
   id: string
+  ownerOrganizationId: string
   customerName: string
   phone: string
   summary: string
@@ -28,6 +29,7 @@ export function createCaseStore(filename: string) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_cases (
       id TEXT PRIMARY KEY,
+      owner_organization_id TEXT NOT NULL DEFAULT 'legacy-local',
       customer_name TEXT NOT NULL,
       phone TEXT NOT NULL,
       summary TEXT NOT NULL,
@@ -45,12 +47,17 @@ export function createCaseStore(filename: string) {
       created_at TEXT NOT NULL
     );
   `)
+  const caseColumns = db.pragma('table_info(service_cases)') as { name: string }[]
+  if (!caseColumns.some((column) => column.name === 'owner_organization_id')) {
+    db.exec(`ALTER TABLE service_cases ADD COLUMN owner_organization_id TEXT NOT NULL DEFAULT 'legacy-local'`)
+  }
 
   const insert = db.prepare(`
-    INSERT INTO service_cases (id, customer_name, phone, summary, consent_to_text, evidence_json, created_at)
-    VALUES (@id, @customerName, @phone, @summary, @consentToText, @evidenceJson, @createdAt)
+    INSERT INTO service_cases (id, owner_organization_id, customer_name, phone, summary, consent_to_text, evidence_json, created_at)
+    VALUES (@id, @ownerOrganizationId, @customerName, @phone, @summary, @consentToText, @evidenceJson, @createdAt)
   `)
   const find = db.prepare('SELECT * FROM service_cases WHERE id = ?')
+  const findOwned = db.prepare('SELECT * FROM service_cases WHERE id = ? AND owner_organization_id = ?')
   const insertAsset = db.prepare(`
     INSERT INTO evidence_assets (id, case_id, original_name, media_type, byte_size, sha256, created_at)
     VALUES (@id, @caseId, @originalName, @mediaType, @byteSize, @sha256, @createdAt)
@@ -78,11 +85,12 @@ export function createCaseStore(filename: string) {
       })
       return stored
     },
-    find(id: string): StoredCase | null {
-      const row = find.get(id) as Record<string, unknown> | undefined
+    find(id: string, ownerOrganizationId?: string): StoredCase | null {
+      const row = (ownerOrganizationId ? findOwned.get(id, ownerOrganizationId) : find.get(id)) as Record<string, unknown> | undefined
       if (!row) return null
       return {
         id: String(row.id),
+        ownerOrganizationId: String(row.owner_organization_id),
         customerName: String(row.customer_name),
         phone: String(row.phone),
         summary: String(row.summary),

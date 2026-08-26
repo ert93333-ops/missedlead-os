@@ -5,6 +5,7 @@ export type ProviderRole = 'primary_cleaner' | 'home_care_coordinator' | 'hvac_t
 
 export type ServiceProvider = {
   id: string
+  ownerOrganizationId: string
   name: string
   role: ProviderRole
   trade: Trade

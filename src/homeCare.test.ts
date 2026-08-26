@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { estimateCleaningRange, matchHomeCareProviders, type HomeCareTeam, type ServiceProvider } from './homeCare'
 
 const providers: ServiceProvider[] = [
-  { id: 'assigned', name: 'Assigned Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
-  { id: 'backup', name: 'Backup Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
-  { id: 'unlicensed', name: 'Unlicensed Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
+  { id: 'assigned', ownerOrganizationId: 'provider-org', name: 'Assigned Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
+  { id: 'backup', ownerOrganizationId: 'backup-org', name: 'Backup Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
+  { id: 'unlicensed', ownerOrganizationId: 'bad-org', name: 'Unlicensed Pro', role: 'hvac_technician', trade: 'hvac', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true },
 ]
 const team: HomeCareTeam = { propertyId: 'home-1', coordinatorId: 'coordinator', assignedProviderIds: ['assigned'], backupProviderIds: ['backup'] }
 

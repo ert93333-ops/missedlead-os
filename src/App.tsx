@@ -17,6 +17,14 @@ const initialEvidence: Evidence[] = [
   { label: 'Supply valve photo', observed: false, weight: 14 },
 ]
 const protocolCatalog = listEvidenceProtocols()
+type PortalRole = 'homeowner' | 'provider' | 'admin'
+type PortalSession = {
+  id: string
+  organizationId: string
+  email: string
+  displayName: string
+  role: PortalRole
+}
 const demoHomeCareTeam: HomeCareTeam = {
   propertyId: 'charlotte-home',
   coordinatorId: 'coordinator-1',
@@ -24,8 +32,8 @@ const demoHomeCareTeam: HomeCareTeam = {
   backupProviderIds: ['cleaner-2'],
 }
 const demoProviders: ServiceProvider[] = [
-  { id: 'cleaner-1', name: 'Maya · Primary home care provider', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
-  { id: 'cleaner-2', name: 'Queen City Care · Backup team', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
+  { id: 'cleaner-1', ownerOrganizationId: 'queen-city-care', name: 'Maya · Primary home care provider', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
+  { id: 'cleaner-2', ownerOrganizationId: 'queen-city-backup', name: 'Queen City Care · Backup team', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
 ]
 
 function loadEvidence(): Evidence[] {
@@ -39,6 +47,8 @@ function loadEvidence(): Evidence[] {
 
 function App() {
   const [session, setSession] = useState<'checking' | 'authenticated' | 'anonymous'>('checking')
+  const [portalSession, setPortalSession] = useState<PortalSession | null>(null)
+  const [email, setEmail] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
@@ -107,7 +117,15 @@ function App() {
 
   useEffect(() => {
     fetch('/api/session')
-      .then((response) => setSession(response.ok ? 'authenticated' : 'anonymous'))
+      .then(async (response) => {
+        if (!response.ok) {
+          setSession('anonymous')
+          return
+        }
+        const result = await response.json() as { session: PortalSession }
+        setPortalSession(result.session)
+        setSession('authenticated')
+      })
       .catch(() => setSession('anonymous'))
   }, [])
 
@@ -117,13 +135,18 @@ function App() {
     const response = await fetch('/api/session', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ accessCode }),
+      body: JSON.stringify({ email: email.trim() || undefined, accessCode }),
     })
     if (!response.ok) {
-      setLoginError('Invalid access code or authentication is not configured.')
+      const result = await response.json().catch(() => ({ error: 'authentication_failed' })) as { error?: string }
+      setLoginError(result.error === 'email_required'
+        ? 'Email is required when multiple portal accounts are configured.'
+        : 'Email or access code is invalid, or authentication is not configured.')
       return
     }
+    const result = await response.json() as { session: PortalSession }
     setAccessCode('')
+    setPortalSession(result.session)
     setSession('authenticated')
   }
 
@@ -259,6 +282,7 @@ function App() {
           <h1>{session === 'checking' ? 'Checking session…' : 'Access recovery operations'}</h1>
           {session === 'anonymous' && (
             <>
+              <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="Required for role-based accounts" /></label>
               <label>Access code<input type="password" value={accessCode} onChange={(event) => setAccessCode(event.target.value)} autoComplete="current-password" required /></label>
               <button type="submit">Sign in</button>
               {loginError && <p className="login-error">{loginError}</p>}
@@ -273,8 +297,23 @@ function App() {
     <main>
       <header className="topbar">
         <div className="brand"><span>ML</span> MissedLead OS</div>
-        <div className="status"><i /> Recovery engine live</div>
+        <nav className="portal-nav" aria-label="Current portal">
+          <span>{portalSession?.displayName ?? 'Authenticated user'}</span>
+          <b>{portalSession?.role ?? 'admin'}</b>
+        </nav>
+        <div className="status"><i /> {portalSession?.role === 'homeowner' ? 'Home care active' : portalSession?.role === 'provider' ? 'Provider workspace live' : 'Operations online'}</div>
       </header>
+
+      <section className="portal-context" aria-labelledby="portal-title">
+        <div>
+          <p className="eyebrow">{portalSession?.role === 'homeowner' ? 'HOMEOWNER PORTAL' : portalSession?.role === 'provider' ? 'SERVICE PROVIDER PORTAL' : 'PLATFORM OPERATIONS'}</p>
+          <h2 id="portal-title">{portalSession?.role === 'homeowner' ? 'Your home, care team, and service history.' : portalSession?.role === 'provider' ? 'Assigned work, evidence, and verified outcomes.' : 'Safety, dispatch, provider, and customer operations.'}</h2>
+        </div>
+        <dl>
+          <div><dt>Organization</dt><dd>{portalSession?.organizationId}</dd></div>
+          <div><dt>Access role</dt><dd>{portalSession?.role}</dd></div>
+        </dl>
+      </section>
 
       <section className="hero-panel">
         <div>

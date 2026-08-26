@@ -104,6 +104,7 @@ const thresholdEvaluationSchema = z.object({
   safetyEvidence: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
 })
 const serviceProviderSchema = z.object({
+  ownerOrganizationId: z.string().trim().min(1).max(120).optional(),
   name: z.string().trim().min(1).max(120),
   role: z.enum(['primary_cleaner', 'home_care_coordinator', 'hvac_technician', 'plumber', 'handyman']),
   trade: z.enum(['cleaning', 'handyman', 'hvac', 'plumbing']),
@@ -173,11 +174,17 @@ export function createApp(store: CaseStore, options: {
   app.use(cookieParser())
   app.use('/api/session', rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false }))
   app.post('/api/session', auth.login)
-  app.get('/api/session', auth.requireSession, (_request, response) => response.json({ authenticated: true }))
+  app.get('/api/session', auth.requireSession, (_request, response) => response.json({
+    authenticated: true,
+    session: response.locals.authSession,
+  }))
   app.delete('/api/session', auth.logout)
 
   app.get('/api/health', (_request, response) => response.json({ status: 'ok' }))
   app.get('/api/jurisdiction', (_request, response) => response.json(charlottePilotJurisdiction))
+  app.get('/api/homeowner/health', auth.requireRole('homeowner', 'admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
+  app.get('/api/provider/health', auth.requireRole('provider', 'admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
+  app.get('/api/admin/health', auth.requireRole('admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
 
   app.post('/api/calls/next', auth.requireSession, (request, response) => {
     const parsed = callTurnSchema.safeParse(request.body)
@@ -207,6 +214,16 @@ export function createApp(store: CaseStore, options: {
   })
 
   app.use('/api/maintenance', auth.requireSession)
+  app.use('/api/maintenance/memberships/:id', (request, response, next) => {
+    const ownerOrganizationId = response.locals.authSession.role === 'admin'
+      ? undefined
+      : response.locals.authSession.organizationId
+    if (!options.maintenance?.findMembership(request.params.id, ownerOrganizationId)) {
+      response.status(404).json({ error: 'membership_not_found' })
+      return
+    }
+    next()
+  })
   app.post('/api/maintenance/memberships', (request, response) => {
     if (!options.maintenance) {
       response.status(503).json({ error: 'maintenance_not_configured' })
@@ -217,7 +234,12 @@ export function createApp(store: CaseStore, options: {
       response.status(400).json({ error: 'invalid_membership', issues: parsed.error.issues })
       return
     }
-    response.status(201).json({ membership: options.maintenance.createMembership(parsed.data) })
+    response.status(201).json({
+      membership: options.maintenance.createMembership({
+        ...parsed.data,
+        ownerOrganizationId: response.locals.authSession.organizationId,
+      }),
+    })
   })
   app.get('/api/maintenance/memberships/:id', (request, response) => {
     const membership = options.maintenance?.findMembership(request.params.id)
@@ -283,6 +305,14 @@ export function createApp(store: CaseStore, options: {
   })
   const transitionThresholdEvent = (status: 'acknowledged' | 'scheduled' | 'resolved') =>
     (request: express.Request, response: express.Response) => {
+      const existing = options.maintenance?.findThresholdEvent(request.params.id)
+      const ownerOrganizationId = response.locals.authSession.role === 'admin'
+        ? undefined
+        : response.locals.authSession.organizationId
+      if (!existing || !options.maintenance?.findMembership(existing.planId, ownerOrganizationId)) {
+        response.status(404).json({ error: 'maintenance_event_not_found' })
+        return
+      }
       const result = options.maintenance?.transitionThresholdEvent(request.params.id, status)
       if (!result || result.error === 'not_found') {
         response.status(404).json({ error: 'maintenance_event_not_found' })
@@ -297,13 +327,20 @@ export function createApp(store: CaseStore, options: {
   app.post('/api/maintenance/events/:id/acknowledge', transitionThresholdEvent('acknowledged'))
   app.post('/api/maintenance/events/:id/schedule', transitionThresholdEvent('scheduled'))
   app.post('/api/maintenance/events/:id/resolve', transitionThresholdEvent('resolved'))
-  app.post('/api/maintenance/providers', (request, response) => {
+  app.post('/api/maintenance/providers', auth.requireRole('provider', 'admin'), (request, response) => {
     const parsed = serviceProviderSchema.safeParse(request.body)
     if (!parsed.success) {
       response.status(400).json({ error: 'invalid_service_provider', issues: parsed.error.issues })
       return
     }
-    response.status(201).json({ provider: options.maintenance?.createServiceProvider(parsed.data) })
+    response.status(201).json({
+      provider: options.maintenance?.createServiceProvider({
+        ...parsed.data,
+        ownerOrganizationId: response.locals.authSession.role === 'admin'
+          ? parsed.data.ownerOrganizationId ?? response.locals.authSession.organizationId
+          : response.locals.authSession.organizationId,
+      }),
+    })
   })
   app.post('/api/maintenance/memberships/:id/team/:providerId', (request, response) => {
     const parsed = z.object({ relationship: z.enum(['assigned', 'backup']) }).safeParse(request.body)
@@ -382,6 +419,19 @@ export function createApp(store: CaseStore, options: {
         response.status(400).json({ error: 'invalid_work_order_transition', issues: parsed.error.issues })
         return
       }
+      const existing = options.maintenance?.findWorkOrder(request.params.id)
+      const membershipOwner = existing
+        ? options.maintenance?.findMembership(existing.planId, response.locals.authSession.role === 'admin'
+          ? undefined
+          : response.locals.authSession.organizationId)
+        : null
+      const assignedProvider = existing ? options.maintenance?.findServiceProvider(existing.providerId) : null
+      const providerCanAccess = response.locals.authSession.role === 'provider'
+        && assignedProvider?.ownerOrganizationId === response.locals.authSession.organizationId
+      if (!existing || (!membershipOwner && !providerCanAccess)) {
+        response.status(404).json({ error: 'work_order_not_found' })
+        return
+      }
       const result = options.maintenance?.transitionWorkOrder(request.params.id, { status, ...parsed.data })
       if (!result || result.error === 'not_found') {
         response.status(404).json({ error: 'work_order_not_found' })
@@ -446,12 +496,18 @@ export function createApp(store: CaseStore, options: {
       response.status(400).json({ error: 'invalid_case', issues: parsed.error.issues })
       return
     }
-    const serviceCase = store.create(parsed.data)
+    const serviceCase = store.create({
+      ...parsed.data,
+      ownerOrganizationId: response.locals.authSession.organizationId,
+    })
     response.status(201).json(presentCase(serviceCase))
   })
 
   app.get('/api/cases/:id', (request, response) => {
-    const serviceCase = store.find(request.params.id)
+    const serviceCase = store.find(
+      request.params.id,
+      response.locals.authSession.role === 'admin' ? undefined : response.locals.authSession.organizationId,
+    )
     if (!serviceCase) {
       response.status(404).json({ error: 'case_not_found' })
       return
@@ -466,7 +522,10 @@ export function createApp(store: CaseStore, options: {
         response.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'evidence_too_large' : 'invalid_evidence' })
         return
       }
-      const serviceCase = store.find(request.params.id)
+      const serviceCase = store.find(
+        request.params.id,
+        response.locals.authSession.role === 'admin' ? undefined : response.locals.authSession.organizationId,
+      )
       if (!serviceCase) {
         response.status(404).json({ error: 'case_not_found' })
         return
@@ -499,6 +558,14 @@ export function createApp(store: CaseStore, options: {
   })
 
   app.get('/api/cases/:id/evidence/:assetId', async (request, response) => {
+    const serviceCase = store.find(
+      request.params.id,
+      response.locals.authSession.role === 'admin' ? undefined : response.locals.authSession.organizationId,
+    )
+    if (!serviceCase) {
+      response.status(404).json({ error: 'evidence_not_found' })
+      return
+    }
     const asset = store.findAsset(request.params.id, request.params.assetId)
     if (!asset) {
       response.status(404).json({ error: 'evidence_not_found' })
@@ -532,7 +599,10 @@ export function createApp(store: CaseStore, options: {
         response.status(503).json({ error: 'multimodal_not_configured' })
         return
       }
-      const serviceCase = store.find(request.params.id)
+      const serviceCase = store.find(
+        request.params.id,
+        response.locals.authSession.role === 'admin' ? undefined : response.locals.authSession.organizationId,
+      )
       if (!serviceCase) {
         response.status(404).json({ error: 'case_not_found' })
         return

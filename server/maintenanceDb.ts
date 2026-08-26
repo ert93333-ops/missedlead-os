@@ -20,6 +20,7 @@ import { matchHomeCareProviders, type HomeCareService, type HomeCareTeam, type S
 
 export type Membership = {
   id: string
+  ownerOrganizationId: string
   technician: { id: string; name: string; phone: string }
   property: { id: string; customerName: string; address: string }
   terms: MaintenancePlanTerms
@@ -79,6 +80,7 @@ export function createMaintenanceStore(filename: string) {
     );
     CREATE TABLE IF NOT EXISTS maintenance_plans (
       id TEXT PRIMARY KEY,
+      owner_organization_id TEXT NOT NULL DEFAULT 'legacy-local',
       technician_id TEXT NOT NULL REFERENCES technicians(id),
       property_id TEXT NOT NULL REFERENCES properties(id),
       terms_json TEXT NOT NULL,
@@ -141,6 +143,7 @@ export function createMaintenanceStore(filename: string) {
       WHERE status IN ('open', 'acknowledged', 'scheduled');
     CREATE TABLE IF NOT EXISTS service_providers (
       id TEXT PRIMARY KEY,
+      owner_organization_id TEXT NOT NULL DEFAULT 'legacy-provider',
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       trade TEXT NOT NULL,
@@ -172,7 +175,14 @@ export function createMaintenanceStore(filename: string) {
       updated_at TEXT NOT NULL
     );
   `)
+  const providerColumns = db.pragma('table_info(service_providers)') as { name: string }[]
+  if (!providerColumns.some((column) => column.name === 'owner_organization_id')) {
+    db.exec(`ALTER TABLE service_providers ADD COLUMN owner_organization_id TEXT NOT NULL DEFAULT 'legacy-provider'`)
+  }
   const planColumns = db.pragma('table_info(maintenance_plans)') as { name: string }[]
+  if (!planColumns.some((column) => column.name === 'owner_organization_id')) {
+    db.exec(`ALTER TABLE maintenance_plans ADD COLUMN owner_organization_id TEXT NOT NULL DEFAULT 'legacy-local'`)
+  }
   if (!planColumns.some((column) => column.name === 'compliance_json')) {
     db.exec(`ALTER TABLE maintenance_plans ADD COLUMN compliance_json TEXT NOT NULL DEFAULT '{"jurisdiction":"NC","legalMode":"scheduled_maintenance","contractorLicenseVerified":false,"serviceContractRegistrationVerified":false}'`)
   }
@@ -183,8 +193,8 @@ export function createMaintenanceStore(filename: string) {
 
   const createTechnician = db.prepare('INSERT INTO technicians (id, name, phone, created_at) VALUES (?, ?, ?, ?)')
   const createProperty = db.prepare('INSERT INTO properties (id, customer_name, address, created_at) VALUES (?, ?, ?, ?)')
-  const createPlan = db.prepare(`INSERT INTO maintenance_plans (id, technician_id, property_id, terms_json, compliance_json, repair_credit_cents, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'active', ?)`)
+  const createPlan = db.prepare(`INSERT INTO maintenance_plans (id, owner_organization_id, technician_id, property_id, terms_json, compliance_json, repair_credit_cents, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`)
   const getPlan = db.prepare(`SELECT p.*, t.name technician_name, t.phone technician_phone, r.customer_name, r.address
     FROM maintenance_plans p JOIN technicians t ON t.id=p.technician_id JOIN properties r ON r.id=p.property_id WHERE p.id=?`)
   const listActivePlans = db.prepare(`SELECT id FROM maintenance_plans WHERE status='active' ORDER BY created_at ASC`)
@@ -218,8 +228,8 @@ export function createMaintenanceStore(filename: string) {
   const deleteProperty = db.prepare('DELETE FROM properties WHERE id=?')
   const deleteTechnician = db.prepare('DELETE FROM technicians WHERE id=?')
   const insertServiceProvider = db.prepare(`INSERT INTO service_providers
-    (id, name, role, trade, active, license_verified, insured, postal_prefixes_json, urgent_available, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (id, owner_organization_id, name, role, trade, active, license_verified, insured, postal_prefixes_json, urgent_available, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   const getServiceProvider = db.prepare('SELECT * FROM service_providers WHERE id=?')
   const listServiceProviders = db.prepare('SELECT * FROM service_providers ORDER BY created_at ASC')
   const assignServiceProvider = db.prepare(`INSERT OR REPLACE INTO home_care_team_assignments
@@ -236,6 +246,7 @@ export function createMaintenanceStore(filename: string) {
 
   const mapMembership = (row: Record<string, unknown>): Membership => ({
     id: String(row.id),
+    ownerOrganizationId: String(row.owner_organization_id),
     technician: { id: String(row.technician_id), name: String(row.technician_name), phone: String(row.technician_phone) },
     property: { id: String(row.property_id), customerName: String(row.customer_name), address: String(row.address) },
     terms: JSON.parse(String(row.terms_json)) as MaintenancePlanTerms,
@@ -272,6 +283,7 @@ export function createMaintenanceStore(filename: string) {
   })
   const mapServiceProvider = (row: Record<string, unknown>): ServiceProvider => ({
     id: String(row.id),
+    ownerOrganizationId: String(row.owner_organization_id),
     name: String(row.name),
     role: String(row.role) as ServiceProvider['role'],
     trade: String(row.trade) as ServiceProvider['trade'],
@@ -295,6 +307,7 @@ export function createMaintenanceStore(filename: string) {
   })
 
   const createMembership = db.transaction((input: {
+    ownerOrganizationId: string
     technicianName: string
     technicianPhone: string
     customerName: string
@@ -311,13 +324,15 @@ export function createMaintenanceStore(filename: string) {
     const planId = crypto.randomUUID()
     createTechnician.run(technicianId, input.technicianName, input.technicianPhone, createdAt)
     createProperty.run(propertyId, input.customerName, input.propertyAddress, createdAt)
-    createPlan.run(planId, technicianId, propertyId, JSON.stringify(input.terms), JSON.stringify(input.compliance), input.initialRepairCreditCents, createdAt)
+    createPlan.run(planId, input.ownerOrganizationId, technicianId, propertyId, JSON.stringify(input.terms), JSON.stringify(input.compliance), input.initialRepairCreditCents, createdAt)
     return findMembership(planId)!
   })
 
-  function findMembership(id: string): Membership | null {
+  function findMembership(id: string, ownerOrganizationId?: string): Membership | null {
     const row = getPlan.get(id) as Record<string, unknown> | undefined
-    return row ? mapMembership(row) : null
+    if (!row) return null
+    const membership = mapMembership(row)
+    return ownerOrganizationId && membership.ownerOrganizationId !== ownerOrganizationId ? null : membership
   }
 
   const quoteTransaction = db.transaction((plan: Membership, laborCents: number, partsCents: number) => {
@@ -405,6 +420,10 @@ export function createMaintenanceStore(filename: string) {
     listThresholdEvents(planId: string) {
       return findMembership(planId) ? listEvents(planId) : null
     },
+    findThresholdEvent(eventId: string) {
+      const row = getThresholdEvent.get(eventId) as Record<string, unknown> | undefined
+      return row ? mapThresholdEvent(row) : null
+    },
     hasOpenSafetyStop(planId: string) {
       return Number((countActiveSafetyEvents.get(planId) as { count: number }).count) > 0
     },
@@ -426,11 +445,15 @@ export function createMaintenanceStore(filename: string) {
     createServiceProvider(input: Omit<ServiceProvider, 'id'>) {
       const provider: ServiceProvider = { ...input, id: crypto.randomUUID() }
       insertServiceProvider.run(
-        provider.id, provider.name, provider.role, provider.trade, provider.active ? 1 : 0,
+        provider.id, provider.ownerOrganizationId, provider.name, provider.role, provider.trade, provider.active ? 1 : 0,
         provider.licenseVerified ? 1 : 0, provider.insured ? 1 : 0, JSON.stringify(provider.postalCodePrefixes),
         provider.availableForUrgentDispatch ? 1 : 0, new Date().toISOString(),
       )
       return provider
+    },
+    findServiceProvider(providerId: string) {
+      const row = getServiceProvider.get(providerId) as Record<string, unknown> | undefined
+      return row ? mapServiceProvider(row) : null
     },
     assignHomeCareProvider(planId: string, providerId: string, relationship: 'assigned' | 'backup') {
       if (!findMembership(planId)) return { error: 'membership_not_found' as const }
@@ -475,6 +498,10 @@ export function createMaintenanceStore(filename: string) {
     },
     listWorkOrders(planId: string) {
       return findMembership(planId) ? (listWorkOrders.all(planId) as Record<string, unknown>[]).map(mapWorkOrder) : null
+    },
+    findWorkOrder(workOrderId: string) {
+      const row = getWorkOrder.get(workOrderId) as Record<string, unknown> | undefined
+      return row ? mapWorkOrder(row) : null
     },
     transitionWorkOrder(workOrderId: string, input: {
       status: 'accepted' | 'scheduled' | 'completed' | 'cancelled'

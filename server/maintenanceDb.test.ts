@@ -7,6 +7,7 @@ beforeEach(() => { store = createMaintenanceStore(':memory:') })
 afterEach(() => { store.close() })
 
 const membershipInput = {
+  ownerOrganizationId: 'household-1',
   technicianName: 'Jordan Lee',
   technicianPhone: '+15125550199',
   customerName: 'Taylor Home',
@@ -108,14 +109,17 @@ describe('maintenance store', () => {
   it('persists a home care team and matches assigned licensed providers first', () => {
     const membership = store.createMembership(membershipInput)
     const assigned = store.createServiceProvider({
+      ownerOrganizationId: 'provider-org',
       name: 'Assigned HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
       licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     })
     const backup = store.createServiceProvider({
+      ownerOrganizationId: 'backup-org',
       name: 'Backup HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
       licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     })
     const unlicensed = store.createServiceProvider({
+      ownerOrganizationId: 'unlicensed-org',
       name: 'Unlicensed HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
       licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     })
@@ -135,6 +139,7 @@ describe('maintenance store', () => {
   it('records work-order acceptance, scheduling, and technician-confirmed outcomes', () => {
     const membership = store.createMembership(membershipInput)
     const provider = store.createServiceProvider({
+      ownerOrganizationId: 'provider-org',
       name: 'Assigned Plumber', role: 'plumber', trade: 'plumbing', active: true,
       licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
     })

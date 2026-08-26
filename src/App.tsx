@@ -671,7 +671,7 @@ function App() {
   }
 
   return (
-    <main>
+    <main className={`portal-${portalSession?.role ?? 'admin'}`}>
       <header className="topbar">
         <div className="brand"><span>ML</span> MissedLead OS</div>
         <nav className="portal-nav" aria-label="Current portal">
@@ -871,7 +871,7 @@ function App() {
         </section>
       )}
 
-      <section className="hero-panel">
+      <section className="hero-panel consumer-operations">
         <div>
           <p className="eyebrow">PLUMBING · INBOUND CASE #ML-2048</p>
           <h1>One missed call.<br />A recoverable job.</h1>
@@ -880,7 +880,7 @@ function App() {
         <div className="metric"><strong>42s</strong><span>time to recovery</span></div>
       </section>
 
-      <section className="grid">
+      <section className="grid consumer-operations">
         <article className="card timeline">
           <div className="card-title"><span>Recovery timeline</span><b>LIVE</b></div>
           <ol>
@@ -1013,7 +1013,7 @@ function App() {
         </article>
       </section>
 
-      <section className="membership-section">
+      <section className="membership-section consumer-operations">
         <div className="membership-heading">
           <p className="eyebrow">CHARLOTTE HOME CARE MEMBERSHIP</p>
           <h2>One home. One accountable care team.</h2>

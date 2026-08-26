@@ -18,6 +18,7 @@ import { evaluateEvidenceProtocol, listEvidenceProtocols } from '../src/evidence
 import { charlottePilotJurisdiction, validateServiceAddress } from '../src/jurisdiction'
 import { estimateCleaningRange } from '../src/homeCare'
 import type { PlatformStore } from './platformDb'
+import type { IdentityStore } from './identityDb'
 
 const evidenceSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -195,6 +196,13 @@ const providerControlSchema = z.object({
   insuranceExpiresAt: z.iso.datetime().nullable(),
   reason: z.string().trim().min(1).max(500),
 })
+const identityUserSchema = z.object({
+  organizationId: z.string().trim().min(1).max(120),
+  email: z.email(),
+  displayName: z.string().trim().min(1).max(120),
+  role: z.enum(['homeowner', 'provider', 'admin']),
+  accessCode: z.string().min(8).max(200),
+})
 
 function presentCase(serviceCase: ReturnType<CaseStore['create']>) {
   const estimate = buildEstimate(serviceCase.evidence, serviceCase.summary)
@@ -216,6 +224,7 @@ export function createApp(store: CaseStore, options: {
   auth?: AuthConfig
   maintenance?: MaintenanceStore
   platform?: PlatformStore
+  identity?: IdentityStore
 } = {}) {
   const app = express()
   const auth = createAuth(options.auth)
@@ -595,6 +604,56 @@ export function createApp(store: CaseStore, options: {
         'Deploy behind HTTPS with backups, monitoring, and a managed secret store.',
       ],
     })
+  })
+  app.post('/api/admin/users', (request, response) => {
+    if (!options.identity) {
+      response.status(503).json({ error: 'identity_store_not_configured' })
+      return
+    }
+    const parsed = identityUserSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_identity_user', issues: parsed.error.issues })
+      return
+    }
+    const result = options.identity.createUser(parsed.data)
+    if ('error' in result) {
+      response.status(409).json({ error: result.error })
+      return
+    }
+    options.platform?.appendAudit({
+      actorUserId: response.locals.authSession.id,
+      actorOrganizationId: response.locals.authSession.organizationId,
+      actorRole: response.locals.authSession.role,
+      action: 'identity.user_created',
+      targetType: 'identity_user',
+      targetId: result.user.id,
+      metadata: { organizationId: result.user.organizationId, role: result.user.role },
+    })
+    response.status(201).json(result)
+  })
+  app.get('/api/admin/users', (_request, response) => {
+    if (!options.identity) {
+      response.status(503).json({ error: 'identity_store_not_configured' })
+      return
+    }
+    response.json({ users: options.identity.listUsers() })
+  })
+  app.post('/api/admin/users/:id/active', (request, response) => {
+    if (!options.identity) {
+      response.status(503).json({ error: 'identity_store_not_configured' })
+      return
+    }
+    const parsed = z.object({ active: z.boolean() }).safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_user_status', issues: parsed.error.issues })
+      return
+    }
+    const user = options.identity.setUserActive(request.params.id, parsed.data.active)
+    if (!user) {
+      response.status(404).json({ error: 'identity_user_not_found' })
+      return
+    }
+    response.json({ user })
   })
 
   app.post('/api/calls/next', auth.requireSession, (request, response) => {

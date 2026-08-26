@@ -10,12 +10,14 @@ import type { AuthConfig } from './auth'
 import { createMaintenanceStore, type MaintenanceStore } from './maintenanceDb'
 import { charlottePilotTerms } from '../src/maintenance'
 import { createPlatformStore, type PlatformStore } from './platformDb'
+import { createIdentityStore, type IdentityStore } from './identityDb'
 
 let store: CaseStore
 let evidenceStorage: EvidenceStorage
 let evidenceRoot: string
 let maintenance: MaintenanceStore
 let platform: PlatformStore
+let identity: IdentityStore
 
 beforeEach(async () => {
   store = createCaseStore(':memory:')
@@ -23,11 +25,13 @@ beforeEach(async () => {
   evidenceStorage = createEvidenceStorage(evidenceRoot)
   maintenance = createMaintenanceStore(':memory:')
   platform = createPlatformStore(':memory:')
+  identity = createIdentityStore(':memory:')
 })
 afterEach(async () => {
   store.close()
   maintenance.close()
   platform.close()
+  identity.close()
   await rm(evidenceRoot, { recursive: true, force: true })
 })
 
@@ -244,6 +248,30 @@ describe('authentication', () => {
     const owner = request.agent(app)
     await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
     await owner.get('/api/provider/pricebook').expect(403, { error: 'insufficient_role' })
+  })
+
+  it('lets admins provision persistent users without exposing access codes', async () => {
+    const authWithIdentity: AuthConfig = {
+      ...roleAuth,
+      authenticate: (email, accessCode) => identity.authenticate(email, accessCode),
+    }
+    const app = createApp(store, { auth: authWithIdentity, identity, platform })
+    const admin = request.agent(app)
+    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
+    const created = await admin.post('/api/admin/users').send({
+      organizationId: 'new-household', email: 'newhome@example.com', displayName: 'New Homeowner',
+      role: 'homeowner', accessCode: 'new-home-code',
+    }).expect(201)
+    expect(created.body.user).toMatchObject({ organizationId: 'new-household', role: 'homeowner', active: true })
+    expect(JSON.stringify(created.body)).not.toContain('new-home-code')
+    expect((await admin.get('/api/admin/users').expect(200)).body.users).toHaveLength(1)
+
+    const homeowner = request.agent(app)
+    await homeowner.post('/api/session').send({ email: 'newhome@example.com', accessCode: 'new-home-code' }).expect(200)
+    await homeowner.get('/api/homeowner/health').expect(200, { role: 'homeowner' })
+    await admin.post(`/api/admin/users/${created.body.user.id}/active`).send({ active: false }).expect(200)
+    const disabled = request.agent(app)
+    await disabled.post('/api/session').send({ email: 'newhome@example.com', accessCode: 'new-home-code' }).expect(401)
   })
 })
 

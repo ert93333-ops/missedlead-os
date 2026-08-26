@@ -6,6 +6,7 @@ export type AuthConfig = {
   sessionSecret: string
   secureCookies: boolean
   users?: AuthUser[]
+  authenticate?: (email: string, accessCode: string) => AuthUser | null
 }
 
 export type UserRole = 'homeowner' | 'provider' | 'admin'
@@ -118,14 +119,15 @@ export function createAuth(config?: AuthConfig) {
       }
       const accessCode = typeof request.body?.accessCode === 'string' ? request.body.accessCode : ''
       const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : ''
-      if (configuredUsers.length > 1 && !email) {
+      if ((configuredUsers.length > 1 || config.authenticate) && !email) {
         response.status(400).json({ error: 'email_required' })
         return
       }
       const candidates = email
         ? configuredUsers.filter((user) => user.email.toLowerCase() === email)
         : configuredUsers
-      const user = candidates.find((candidate) => equalSecret(accessCode, candidate.accessCode))
+      const user = config.authenticate?.(email, accessCode)
+        ?? candidates.find((candidate) => equalSecret(accessCode, candidate.accessCode))
       if (!user) {
         response.status(401).json({ error: 'invalid_access_code' })
         return

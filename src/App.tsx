@@ -81,6 +81,14 @@ type AdminOperations = {
   auditLogs: { id: string; action: string; targetType: string; targetId: string; createdAt: string }[]
   queues: { safetyReview: number; unassigned: number }
 }
+type AdminIdentityUser = {
+  id: string
+  organizationId: string
+  email: string
+  displayName: string
+  role: PortalRole
+  active: boolean
+}
 const demoHomeCareTeam: HomeCareTeam = {
   propertyId: 'charlotte-home',
   coordinatorId: 'coordinator-1',
@@ -141,6 +149,10 @@ function App() {
   })
   const [dispatchProviderId, setDispatchProviderId] = useState('provider-1')
   const [adminMessage, setAdminMessage] = useState('')
+  const [adminUsers, setAdminUsers] = useState<AdminIdentityUser[]>([])
+  const [userDraft, setUserDraft] = useState({
+    organizationId: '', email: '', displayName: '', role: 'homeowner', accessCode: '',
+  })
   const [accessCode, setAccessCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
@@ -237,8 +249,8 @@ function App() {
   }, [portalSession])
 
   const refreshAdminOperations = async () => {
-    const [operationsResponse, integrationsResponse] = await Promise.all([
-      fetch('/api/admin/operations'), fetch('/api/admin/integrations'),
+    const [operationsResponse, integrationsResponse, usersResponse] = await Promise.all([
+      fetch('/api/admin/operations'), fetch('/api/admin/integrations'), fetch('/api/admin/users'),
     ])
     if (!operationsResponse.ok || !integrationsResponse.ok) {
       setAdminMessage('Operations data could not be loaded.')
@@ -247,6 +259,7 @@ function App() {
     setAdminOperations(await operationsResponse.json() as AdminOperations)
     const integrationResult = await integrationsResponse.json() as { integrations: typeof integrationStatus }
     setIntegrationStatus(integrationResult.integrations)
+    if (usersResponse.ok) setAdminUsers(((await usersResponse.json()) as { users: AdminIdentityUser[] }).users)
   }
 
   useEffect(() => {
@@ -616,6 +629,27 @@ function App() {
     if (response.ok) await refreshAdminOperations()
   }
 
+  const createIdentityUser = async (event: FormEvent) => {
+    event.preventDefault()
+    const response = await fetch('/api/admin/users', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(userDraft),
+    })
+    const result = await response.json() as { error?: string }
+    setAdminMessage(response.ok ? 'Portal user provisioned.' : result.error ?? 'User could not be provisioned.')
+    if (response.ok) {
+      setUserDraft({ organizationId: '', email: '', displayName: '', role: 'homeowner', accessCode: '' })
+      await refreshAdminOperations()
+    }
+  }
+
+  const toggleIdentityUser = async (user: AdminIdentityUser) => {
+    const response = await fetch(`/api/admin/users/${user.id}/active`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ active: !user.active }),
+    })
+    setAdminMessage(response.ok ? `User ${user.active ? 'disabled' : 'enabled'}.` : 'User status could not be changed.')
+    if (response.ok) await refreshAdminOperations()
+  }
+
   if (session !== 'authenticated') {
     return (
       <main className="login-shell">
@@ -709,6 +743,7 @@ function App() {
                 </article>
               ))}
             </div>
+
           </div>
           <div className="workspace-card notification-center">
             <h3>Notifications</h3>
@@ -814,6 +849,16 @@ function App() {
                 <article key={dispute.id}><div><strong>{dispute.summary}</strong><b>{dispute.status}</b></div><p>{dispute.category} · {dispute.organizationId}</p>{dispute.status !== 'resolved' && <button onClick={() => advanceDispute(dispute)}>{dispute.status === 'open' ? 'Start investigation' : 'Record resolution'}</button>}</article>
               ))}
             </div>
+            <form className="workspace-card" onSubmit={createIdentityUser}>
+              <h3>Portal users</h3>
+              <label>Organization ID<input required value={userDraft.organizationId} onChange={(event) => setUserDraft({ ...userDraft, organizationId: event.target.value })} /></label>
+              <label>Email<input required type="email" value={userDraft.email} onChange={(event) => setUserDraft({ ...userDraft, email: event.target.value })} /></label>
+              <label>Display name<input required value={userDraft.displayName} onChange={(event) => setUserDraft({ ...userDraft, displayName: event.target.value })} /></label>
+              <label>Role<select value={userDraft.role} onChange={(event) => setUserDraft({ ...userDraft, role: event.target.value })}><option value="homeowner">Homeowner</option><option value="provider">Provider</option><option value="admin">Admin</option></select></label>
+              <label>Temporary access code<input required type="password" minLength={8} value={userDraft.accessCode} onChange={(event) => setUserDraft({ ...userDraft, accessCode: event.target.value })} /></label>
+              <button type="submit">Provision user</button>
+              <div className="compact-list">{adminUsers.map((user) => <p key={user.id}><span>{user.email} · {user.role}</span><button type="button" onClick={() => toggleIdentityUser(user)}>{user.active ? 'Disable' : 'Enable'}</button></p>)}</div>
+            </form>
           </div>
           <div className="integration-grid">
             {Object.entries(integrationStatus).map(([name, status]) => <article key={name}><span>{name}</span><b className={status.configured ? 'ready' : 'blocked'}>{status.configured ? 'configured' : 'human action required'}</b></article>)}

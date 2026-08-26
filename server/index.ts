@@ -8,6 +8,7 @@ import { createMaintenanceStore } from './maintenanceDb'
 import { createMaintenanceScheduler } from './maintenanceScheduler'
 import type { AuthUser } from './auth'
 import { createPlatformStore } from './platformDb'
+import { createIdentityStore } from './identityDb'
 
 dotenv.config({ path: '.env.local' })
 mkdirSync('data', { recursive: true })
@@ -27,6 +28,7 @@ const multimodal = createFallbackAnalyzer(
 const evidenceStorage = createEvidenceStorage('data/evidence')
 const maintenance = createMaintenanceStore('data/missedlead.db')
 const platform = createPlatformStore('data/missedlead.db')
+const identity = createIdentityStore('data/missedlead.db')
 const maintenanceScheduler = createMaintenanceScheduler(maintenance, {
   intervalMs: Number(process.env.MAINTENANCE_EVALUATION_INTERVAL_MS ?? 6 * 60 * 60 * 1000),
   runImmediately: true,
@@ -61,15 +63,25 @@ if (process.env.PROVIDER_ACCESS_CODE) {
     accessCode: process.env.PROVIDER_ACCESS_CODE,
   })
 }
+for (const user of localUsers) {
+  identity.createUser({
+    organizationId: user.organizationId,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    accessCode: user.accessCode,
+  })
+}
 const auth = process.env.APP_ACCESS_CODE && process.env.SESSION_SECRET
   ? {
       accessCode: process.env.APP_ACCESS_CODE,
       sessionSecret: process.env.SESSION_SECRET,
       secureCookies: process.env.NODE_ENV === 'production',
       users: localUsers,
+      authenticate: (email: string, accessCode: string) => identity.authenticate(email, accessCode),
     }
   : undefined
-const server = createApp(store, { twilio: twilioConfig, multimodal, evidenceStorage, auth, maintenance, platform }).listen(port, '127.0.0.1', () => {
+const server = createApp(store, { twilio: twilioConfig, multimodal, evidenceStorage, auth, maintenance, platform, identity }).listen(port, '127.0.0.1', () => {
   console.log(`MissedLead API listening on http://127.0.0.1:${port}`)
 })
 
@@ -79,6 +91,7 @@ function shutdown() {
     store.close()
     maintenance.close()
     platform.close()
+    identity.close()
     process.exit(0)
   })
 }

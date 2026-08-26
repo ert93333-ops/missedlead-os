@@ -346,6 +346,25 @@ export function createApp(store: CaseStore, options: {
       response.status(404).json({ error: 'booking_not_found' })
     }
   })
+  app.get('/api/homeowner/notifications', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    response.json({ notifications: options.platform.listNotifications(response.locals.authSession.organizationId) })
+  })
+  app.post('/api/homeowner/notifications/:id/read', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const notification = options.platform.markNotificationRead(request.params.id, response.locals.authSession.organizationId)
+    if (!notification) {
+      response.status(404).json({ error: 'notification_not_found' })
+      return
+    }
+    response.json({ notification })
+  })
   app.use('/api/provider', auth.requireRole('provider', 'admin'))
   app.post('/api/provider/pricebook', (request, response) => {
     if (!options.platform) {
@@ -397,19 +416,61 @@ export function createApp(store: CaseStore, options: {
     response.json({ availability: options.platform.listAvailability(response.locals.authSession.organizationId) })
   })
   app.get('/api/provider/work-orders', (_request, response) => {
-    if (!options.maintenance) {
-      response.status(503).json({ error: 'maintenance_not_configured' })
+    if (!options.maintenance && !options.platform) {
+      response.status(503).json({ error: 'provider_work_store_not_configured' })
       return
     }
-    const workOrders = options.maintenance.listProviderWorkOrders(response.locals.authSession.organizationId)
+    const workOrders = options.maintenance?.listProviderWorkOrders(response.locals.authSession.organizationId) ?? []
     const completed = workOrders.filter((workOrder) => workOrder.status === 'completed' && workOrder.finalOutcome)
+    const serviceBookings = options.platform?.listProviderBookings(response.locals.authSession.organizationId) ?? []
+    const completedBookings = serviceBookings.filter((booking) => booking.status === 'completed' && booking.finalOutcome)
     response.json({
       workOrders,
+      serviceBookings,
       earnings: {
-        completedJobs: completed.length,
-        grossRevenueCents: completed.reduce((total, workOrder) => total + (workOrder.finalOutcome?.finalPriceCents ?? 0), 0),
+        completedJobs: completed.length + completedBookings.length,
+        grossRevenueCents: completed.reduce((total, workOrder) => total + (workOrder.finalOutcome?.finalPriceCents ?? 0), 0)
+          + completedBookings.reduce((total, booking) => total + (booking.finalOutcome?.finalPriceCents ?? 0), 0),
       },
     })
+  })
+  app.post('/api/provider/service-bookings/:id/accept', (request, response) => {
+    const booking = options.platform?.acceptProviderBooking(request.params.id, response.locals.authSession.organizationId)
+    if (!booking) {
+      response.status(404).json({ error: 'assigned_booking_not_found' })
+      return
+    }
+    response.json({ booking })
+  })
+  app.post('/api/provider/service-bookings/:id/schedule', (request, response) => {
+    const parsed = z.object({ scheduledAt: z.iso.datetime() }).safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_schedule', issues: parsed.error.issues })
+      return
+    }
+    const booking = options.platform?.scheduleProviderBooking(
+      request.params.id, response.locals.authSession.organizationId, parsed.data.scheduledAt,
+    )
+    if (!booking) {
+      response.status(409).json({ error: 'booking_must_be_assigned_and_accepted' })
+      return
+    }
+    response.json({ booking })
+  })
+  app.post('/api/provider/service-bookings/:id/complete', (request, response) => {
+    const parsed = finalOutcomeSchema.safeParse(request.body?.finalOutcome)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_final_outcome', issues: parsed.error.issues })
+      return
+    }
+    const booking = options.platform?.completeProviderBooking(
+      request.params.id, response.locals.authSession.organizationId, parsed.data,
+    )
+    if (!booking) {
+      response.status(409).json({ error: 'booking_must_be_scheduled' })
+      return
+    }
+    response.json({ booking })
   })
   app.use('/api/admin', auth.requireRole('admin'))
   app.get('/api/admin/operations', (_request, response) => {
@@ -434,12 +495,18 @@ export function createApp(store: CaseStore, options: {
       response.status(503).json({ error: 'platform_store_not_configured' })
       return
     }
-    const parsed = z.object({ providerId: z.string().min(1), safetyReviewed: z.boolean() }).safeParse(request.body)
+    const parsed = z.object({
+      providerId: z.string().min(1),
+      providerOrganizationId: z.string().min(1),
+      safetyReviewed: z.boolean(),
+    }).safeParse(request.body)
     if (!parsed.success) {
       response.status(400).json({ error: 'invalid_dispatch', issues: parsed.error.issues })
       return
     }
-    const result = options.platform.dispatchBooking(request.params.id, parsed.data.providerId, parsed.data.safetyReviewed)
+    const result = options.platform.dispatchBooking(
+      request.params.id, parsed.data.providerId, parsed.data.providerOrganizationId, parsed.data.safetyReviewed,
+    )
     if ('error' in result) {
       response.status(result.error === 'booking_not_found' ? 404 : 409).json({ error: result.error })
       return
@@ -451,7 +518,11 @@ export function createApp(store: CaseStore, options: {
       action: 'booking.dispatched',
       targetType: 'booking',
       targetId: request.params.id,
-      metadata: { providerId: parsed.data.providerId, safetyReviewed: parsed.data.safetyReviewed },
+      metadata: {
+        providerId: parsed.data.providerId,
+        providerOrganizationId: parsed.data.providerOrganizationId,
+        safetyReviewed: parsed.data.safetyReviewed,
+      },
     })
     response.json(result)
   })

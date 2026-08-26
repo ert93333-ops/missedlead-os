@@ -25,6 +25,16 @@ export type ServiceBooking = {
   estimateLowCents: number | null
   estimateHighCents: number | null
   assignedProviderId: string | null
+  assignedProviderOrganizationId: string | null
+  providerAcceptedAt: string | null
+  finalOutcome: null | {
+    technicianConfirmedIssue: string
+    parts: string[]
+    laborMinutes: number
+    finalPriceCents: number
+    outcome: 'resolved' | 'follow_up_required' | 'no_fault_found'
+    aiAssessmentOutcome: 'accepted' | 'corrected' | 'rejected'
+  }
   createdAt: string
 }
 
@@ -69,6 +79,16 @@ export type Dispute = {
   createdAt: string
 }
 
+export type HomeownerNotification = {
+  id: string
+  organizationId: string
+  type: 'booking' | 'safety' | 'dispatch' | 'dispute' | 'maintenance'
+  title: string
+  message: string
+  readAt: string | null
+  createdAt: string
+}
+
 export function createPlatformStore(filename: string) {
   const db = new Database(filename)
   db.pragma('journal_mode = WAL')
@@ -98,6 +118,9 @@ export function createPlatformStore(filename: string) {
       estimate_low_cents INTEGER,
       estimate_high_cents INTEGER,
       assigned_provider_id TEXT,
+      assigned_provider_organization_id TEXT,
+      provider_accepted_at TEXT,
+      final_outcome_json TEXT,
       created_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS one_active_property_slot ON service_bookings(property_id, preferred_start)
@@ -153,7 +176,27 @@ export function createPlatformStore(filename: string) {
       metadata_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS homeowner_notifications (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      type TEXT NOT NULL CHECK (type IN ('booking','safety','dispatch','dispute','maintenance')),
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS homeowner_notifications_org ON homeowner_notifications(organization_id, created_at);
   `)
+  const bookingColumns = db.pragma('table_info(service_bookings)') as { name: string }[]
+  if (!bookingColumns.some((column) => column.name === 'assigned_provider_organization_id')) {
+    db.exec('ALTER TABLE service_bookings ADD COLUMN assigned_provider_organization_id TEXT')
+  }
+  if (!bookingColumns.some((column) => column.name === 'provider_accepted_at')) {
+    db.exec('ALTER TABLE service_bookings ADD COLUMN provider_accepted_at TEXT')
+  }
+  if (!bookingColumns.some((column) => column.name === 'final_outcome_json')) {
+    db.exec('ALTER TABLE service_bookings ADD COLUMN final_outcome_json TEXT')
+  }
   const insertProperty = db.prepare(`INSERT INTO platform_properties
     (id, organization_id, customer_name, address_line_1, city, state, county, postal_code, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -192,6 +235,18 @@ export function createPlatformStore(filename: string) {
   const listAudits = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?')
   const listAllBookings = db.prepare('SELECT * FROM service_bookings ORDER BY created_at DESC')
   const updateBookingDispatch = db.prepare(`UPDATE service_bookings SET status=?, assigned_provider_id=? WHERE id=?`)
+  const updateBookingProviderOrg = db.prepare('UPDATE service_bookings SET assigned_provider_organization_id=? WHERE id=?')
+  const listProviderBookings = db.prepare('SELECT * FROM service_bookings WHERE assigned_provider_organization_id=? ORDER BY created_at DESC')
+  const acceptProviderBooking = db.prepare('UPDATE service_bookings SET provider_accepted_at=? WHERE id=? AND assigned_provider_organization_id=? AND status=?')
+  const scheduleProviderBooking = db.prepare(`UPDATE service_bookings SET status='scheduled', preferred_start=?
+    WHERE id=? AND assigned_provider_organization_id=? AND status='assigned' AND provider_accepted_at IS NOT NULL`)
+  const completeProviderBooking = db.prepare(`UPDATE service_bookings SET status='completed', final_outcome_json=?
+    WHERE id=? AND assigned_provider_organization_id=? AND status='scheduled'`)
+  const insertNotification = db.prepare(`INSERT INTO homeowner_notifications
+    (id, organization_id, type, title, message, read_at, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)`)
+  const listNotifications = db.prepare('SELECT * FROM homeowner_notifications WHERE organization_id=? ORDER BY created_at DESC')
+  const markNotificationRead = db.prepare('UPDATE homeowner_notifications SET read_at=? WHERE id=? AND organization_id=?')
+  const getNotification = db.prepare('SELECT * FROM homeowner_notifications WHERE id=? AND organization_id=?')
 
   const mapProperty = (row: Record<string, unknown>): PlatformProperty => ({
     id: String(row.id), organizationId: String(row.organization_id), customerName: String(row.customer_name),
@@ -206,6 +261,9 @@ export function createPlatformStore(filename: string) {
     estimateLowCents: row.estimate_low_cents === null ? null : Number(row.estimate_low_cents),
     estimateHighCents: row.estimate_high_cents === null ? null : Number(row.estimate_high_cents),
     assignedProviderId: row.assigned_provider_id ? String(row.assigned_provider_id) : null,
+    assignedProviderOrganizationId: row.assigned_provider_organization_id ? String(row.assigned_provider_organization_id) : null,
+    providerAcceptedAt: row.provider_accepted_at ? String(row.provider_accepted_at) : null,
+    finalOutcome: row.final_outcome_json ? JSON.parse(String(row.final_outcome_json)) as NonNullable<ServiceBooking['finalOutcome']> : null,
     createdAt: String(row.created_at),
   })
   const mapPricebookItem = (row: Record<string, unknown>): ProviderPricebookItem => ({
@@ -229,6 +287,19 @@ export function createPlatformStore(filename: string) {
     summary: String(row.summary), status: String(row.status) as Dispute['status'],
     resolution: row.resolution ? String(row.resolution) : null, createdAt: String(row.created_at),
   })
+  const mapNotification = (row: Record<string, unknown>): HomeownerNotification => ({
+    id: String(row.id), organizationId: String(row.organization_id), type: String(row.type) as HomeownerNotification['type'],
+    title: String(row.title), message: String(row.message), readAt: row.read_at ? String(row.read_at) : null,
+    createdAt: String(row.created_at),
+  })
+  const notify = (organizationId: string, type: HomeownerNotification['type'], title: string, message: string) => {
+    const notification: HomeownerNotification = {
+      id: crypto.randomUUID(), organizationId, type, title, message, readAt: null, createdAt: new Date().toISOString(),
+    }
+    insertNotification.run(notification.id, notification.organizationId, notification.type,
+      notification.title, notification.message, notification.createdAt)
+    return notification
+  }
 
   return {
     createProperty(input: Omit<PlatformProperty, 'id' | 'createdAt'>) {
@@ -244,9 +315,12 @@ export function createPlatformStore(filename: string) {
       const row = (organizationId ? findProperty.get(id, organizationId) : findPropertyAdmin.get(id)) as Record<string, unknown> | undefined
       return row ? mapProperty(row) : null
     },
-    createBooking(input: Omit<ServiceBooking, 'id' | 'createdAt' | 'status' | 'assignedProviderId'>) {
+    createBooking(input: Omit<ServiceBooking, 'id' | 'createdAt' | 'status' | 'assignedProviderId' | 'assignedProviderOrganizationId' | 'providerAcceptedAt' | 'finalOutcome'>) {
       const status: ServiceBooking['status'] = input.safetyStop ? 'human_review' : 'requested'
-      const booking: ServiceBooking = { ...input, id: crypto.randomUUID(), status, assignedProviderId: null, createdAt: new Date().toISOString() }
+      const booking: ServiceBooking = {
+        ...input, id: crypto.randomUUID(), status, assignedProviderId: null, assignedProviderOrganizationId: null,
+        providerAcceptedAt: null, finalOutcome: null, createdAt: new Date().toISOString(),
+      }
       try {
         insertBooking.run(booking.id, booking.organizationId, booking.propertyId, booking.service, booking.preferredStart,
           booking.status, booking.safetyStop ? 1 : 0, booking.symptomSummary, booking.estimateLowCents,
@@ -258,6 +332,11 @@ export function createPlatformStore(filename: string) {
         )) return { error: 'booking_slot_conflict' as const }
         throw error
       }
+      notify(booking.organizationId, booking.safetyStop ? 'safety' : 'booking',
+        booking.safetyStop ? 'Human safety review required' : 'Service request received',
+        booking.safetyStop
+          ? 'Automated pricing and normal booking are stopped until an operator reviews the reported danger.'
+          : 'Your preferred time and preliminary range were recorded. A provider assignment is still pending.')
       return { booking }
     },
     listBookings(organizationId: string) {
@@ -297,12 +376,31 @@ export function createPlatformStore(filename: string) {
     listAllBookings() {
       return (listAllBookings.all() as Record<string, unknown>[]).map(mapBooking)
     },
-    dispatchBooking(bookingId: string, providerId: string, safetyReviewed: boolean) {
+    dispatchBooking(bookingId: string, providerId: string, providerOrganizationId: string, safetyReviewed: boolean) {
       const booking = this.findBooking(bookingId)
       if (!booking) return { error: 'booking_not_found' as const }
       if (booking.safetyStop && !safetyReviewed) return { error: 'safety_review_required' as const }
       updateBookingDispatch.run('assigned', providerId, bookingId)
+      updateBookingProviderOrg.run(providerOrganizationId, bookingId)
+      notify(booking.organizationId, 'dispatch', 'Provider assigned',
+        `A service provider was assigned to your ${booking.service.replaceAll('_', ' ')} request.`)
       return { booking: this.findBooking(bookingId)! }
+    },
+    listProviderBookings(organizationId: string) {
+      return (listProviderBookings.all(organizationId) as Record<string, unknown>[]).map(mapBooking)
+    },
+    acceptProviderBooking(id: string, organizationId: string) {
+      const acceptedAt = new Date().toISOString()
+      if (acceptProviderBooking.run(acceptedAt, id, organizationId, 'assigned').changes === 0) return null
+      return this.findBooking(id)
+    },
+    scheduleProviderBooking(id: string, organizationId: string, scheduledAt: string) {
+      if (scheduleProviderBooking.run(scheduledAt, id, organizationId).changes === 0) return null
+      return this.findBooking(id)
+    },
+    completeProviderBooking(id: string, organizationId: string, finalOutcome: NonNullable<ServiceBooking['finalOutcome']>) {
+      if (completeProviderBooking.run(JSON.stringify(finalOutcome), id, organizationId).changes === 0) return null
+      return this.findBooking(id)
     },
     setProviderControl(input: Omit<ProviderControl, 'updatedAt'>) {
       const control = { ...input, updatedAt: new Date().toISOString() }
@@ -318,6 +416,8 @@ export function createPlatformStore(filename: string) {
       const dispute: Dispute = { ...input, id: crypto.randomUUID(), status: 'open', resolution: null, createdAt: new Date().toISOString() }
       insertDispute.run(dispute.id, dispute.organizationId, dispute.bookingId, dispute.category,
         dispute.summary, dispute.createdAt, dispute.createdAt)
+      notify(dispute.organizationId, 'dispute', 'Support case opened',
+        'An operator will review your case. Refunds or corrective work are not promised until the review is complete.')
       return dispute
     },
     listDisputes() {
@@ -349,6 +449,14 @@ export function createPlatformStore(filename: string) {
         targetId: String(row.target_id), metadata: JSON.parse(String(row.metadata_json)) as Record<string, unknown>,
         createdAt: String(row.created_at),
       }))
+    },
+    listNotifications(organizationId: string) {
+      return (listNotifications.all(organizationId) as Record<string, unknown>[]).map(mapNotification)
+    },
+    markNotificationRead(id: string, organizationId: string) {
+      if (!getNotification.get(id, organizationId)) return null
+      markNotificationRead.run(new Date().toISOString(), id, organizationId)
+      return mapNotification(getNotification.get(id, organizationId) as Record<string, unknown>)
     },
     close() { db.close() },
   }

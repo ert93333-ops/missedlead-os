@@ -44,6 +44,14 @@ type HomeownerBooking = {
   estimateLowCents: number | null
   estimateHighCents: number | null
 }
+type HomeownerNotification = {
+  id: string
+  type: string
+  title: string
+  message: string
+  readAt: string | null
+  createdAt: string
+}
 type ProviderPricebookItem = {
   id: string
   service: string
@@ -64,6 +72,7 @@ type ProviderWorkOrder = {
   propertyAddress?: string
 }
 type AdminBooking = HomeownerBooking & { organizationId: string; symptomSummary: string; assignedProviderId: string | null }
+type ProviderServiceBooking = AdminBooking & { providerAcceptedAt: string | null }
 type AdminDispute = { id: string; organizationId: string; category: string; summary: string; status: string; resolution: string | null }
 type AdminOperations = {
   bookings: AdminBooking[]
@@ -92,12 +101,17 @@ function loadEvidence(): Evidence[] {
   }
 }
 
+function nextAvailableDay(): string {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+}
+
 function App() {
   const [session, setSession] = useState<'checking' | 'authenticated' | 'anonymous'>('checking')
   const [portalSession, setPortalSession] = useState<PortalSession | null>(null)
   const [email, setEmail] = useState('')
   const [homeownerProperties, setHomeownerProperties] = useState<HomeownerProperty[]>([])
   const [homeownerBookings, setHomeownerBookings] = useState<HomeownerBooking[]>([])
+  const [homeownerNotifications, setHomeownerNotifications] = useState<HomeownerNotification[]>([])
   const [propertyDraft, setPropertyDraft] = useState({
     customerName: '', addressLine1: '', city: 'Charlotte', state: 'NC', county: 'Mecklenburg', postalCode: '',
   })
@@ -108,12 +122,16 @@ function App() {
   const [homeownerMessage, setHomeownerMessage] = useState('')
   const [providerPricebook, setProviderPricebook] = useState<ProviderPricebookItem[]>([])
   const [providerWorkOrders, setProviderWorkOrders] = useState<ProviderWorkOrder[]>([])
+  const [providerServiceBookings, setProviderServiceBookings] = useState<ProviderServiceBooking[]>([])
   const [providerEarnings, setProviderEarnings] = useState({ completedJobs: 0, grossRevenueCents: 0 })
   const [pricebookDraft, setPricebookDraft] = useState({
     service: 'hvac_service', label: 'Diagnostic visit', baseFee: '89', laborLow: '90', laborHigh: '290',
   })
   const [availabilityDraft, setAvailabilityDraft] = useState({ weekday: '1', startTime: '08:00', endTime: '17:00', urgent: true })
   const [providerMessage, setProviderMessage] = useState('')
+  const [completionDraft, setCompletionDraft] = useState({
+    issue: '', parts: '', laborMinutes: '60', finalPrice: '189', outcome: 'resolved', aiAssessmentOutcome: 'corrected',
+  })
   const [adminOperations, setAdminOperations] = useState<AdminOperations>({
     bookings: [], disputes: [], providerControls: [], auditLogs: [], queues: { safetyReview: 0, unassigned: 0 },
   })
@@ -208,10 +226,12 @@ function App() {
     Promise.all([
       fetch('/api/homeowner/properties').then((response) => response.ok ? response.json() : { properties: [] }),
       fetch('/api/homeowner/bookings').then((response) => response.ok ? response.json() : { bookings: [] }),
-    ]).then(([propertiesResult, bookingsResult]) => {
+      fetch('/api/homeowner/notifications').then((response) => response.ok ? response.json() : { notifications: [] }),
+    ]).then(([propertiesResult, bookingsResult, notificationsResult]) => {
       const properties = (propertiesResult as { properties: HomeownerProperty[] }).properties
       setHomeownerProperties(properties)
       setHomeownerBookings((bookingsResult as { bookings: HomeownerBooking[] }).bookings)
+      setHomeownerNotifications((notificationsResult as { notifications: HomeownerNotification[] }).notifications)
       if (properties[0]) setBookingDraft((draft) => ({ ...draft, propertyId: draft.propertyId || properties[0].id }))
     }).catch(() => setHomeownerMessage('Home data could not be loaded.'))
   }, [portalSession])
@@ -238,11 +258,12 @@ function App() {
     if (portalSession?.role !== 'provider') return
     Promise.all([
       fetch('/api/provider/pricebook').then((response) => response.ok ? response.json() : { items: [] }),
-      fetch('/api/provider/work-orders').then((response) => response.ok ? response.json() : { workOrders: [], earnings: { completedJobs: 0, grossRevenueCents: 0 } }),
+      fetch('/api/provider/work-orders').then((response) => response.ok ? response.json() : { workOrders: [], serviceBookings: [], earnings: { completedJobs: 0, grossRevenueCents: 0 } }),
     ]).then(([pricebookResult, workOrderResult]) => {
       setProviderPricebook((pricebookResult as { items: ProviderPricebookItem[] }).items)
-      const workData = workOrderResult as { workOrders: ProviderWorkOrder[]; earnings: typeof providerEarnings }
+      const workData = workOrderResult as { workOrders: ProviderWorkOrder[]; serviceBookings: ProviderServiceBooking[]; earnings: typeof providerEarnings }
       setProviderWorkOrders(workData.workOrders)
+      setProviderServiceBookings(workData.serviceBookings)
       setProviderEarnings(workData.earnings)
     }).catch(() => setProviderMessage('Provider workspace could not be loaded.'))
   }, [portalSession])
@@ -447,9 +468,18 @@ function App() {
       return
     }
     setHomeownerBookings((bookings) => [result.booking!, ...bookings])
+    const notifications = await fetch('/api/homeowner/notifications')
+    if (notifications.ok) setHomeownerNotifications(((await notifications.json()) as { notifications: HomeownerNotification[] }).notifications)
     setHomeownerMessage(result.booking.safetyStop
       ? 'Safety concern routed to human review. Automated pricing and normal booking are stopped.'
       : 'Service request submitted with a preliminary price range.')
+  }
+
+  const readHomeownerNotification = async (notificationId: string) => {
+    const response = await fetch(`/api/homeowner/notifications/${notificationId}/read`, { method: 'POST' })
+    if (!response.ok) return
+    setHomeownerNotifications((notifications) => notifications.map((notification) =>
+      notification.id === notificationId ? { ...notification, readAt: new Date().toISOString() } : notification))
   }
 
   const createPricebookItem = async (event: FormEvent) => {
@@ -484,6 +514,74 @@ function App() {
     })
     const result = await response.json() as { error?: string }
     setProviderMessage(response.ok ? 'Availability published.' : result.error === 'availability_conflict' ? 'That availability window already exists.' : 'Availability could not be saved.')
+  }
+
+  const refreshProviderWorkOrders = async () => {
+    const response = await fetch('/api/provider/work-orders')
+    if (!response.ok) return
+    const result = await response.json() as { workOrders: ProviderWorkOrder[]; serviceBookings: ProviderServiceBooking[]; earnings: typeof providerEarnings }
+    setProviderWorkOrders(result.workOrders)
+    setProviderServiceBookings(result.serviceBookings)
+    setProviderEarnings(result.earnings)
+  }
+
+  const advanceProviderWorkOrder = async (workOrder: ProviderWorkOrder) => {
+    const action = workOrder.status === 'offered' ? 'accept' : workOrder.status === 'accepted' ? 'schedule' : 'complete'
+    const body = action === 'schedule'
+      ? { scheduledAt: nextAvailableDay() }
+      : action === 'complete'
+        ? {
+            finalOutcome: {
+              technicianConfirmedIssue: completionDraft.issue,
+              parts: completionDraft.parts.split(',').map((part) => part.trim()).filter(Boolean),
+              laborMinutes: Number(completionDraft.laborMinutes),
+              finalPriceCents: Math.round(Number(completionDraft.finalPrice) * 100),
+              outcome: completionDraft.outcome,
+              aiAssessmentOutcome: completionDraft.aiAssessmentOutcome,
+            },
+          }
+        : {}
+    if (action === 'complete' && !completionDraft.issue.trim()) {
+      setProviderMessage('Enter the field-confirmed issue before completing work.')
+      return
+    }
+    const response = await fetch(`/api/maintenance/work-orders/${workOrder.id}/${action}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+    const result = await response.json() as { error?: string }
+    setProviderMessage(response.ok ? `Work order ${action} recorded.` : result.error ?? 'Work order could not be updated.')
+    if (response.ok) await refreshProviderWorkOrders()
+  }
+
+  const advanceProviderBooking = async (booking: ProviderServiceBooking) => {
+    const action = booking.status === 'assigned' && !booking.providerAcceptedAt
+      ? 'accept'
+      : booking.status === 'assigned'
+        ? 'schedule'
+        : 'complete'
+    const body = action === 'schedule'
+      ? { scheduledAt: nextAvailableDay() }
+      : action === 'complete'
+        ? {
+            finalOutcome: {
+              technicianConfirmedIssue: completionDraft.issue,
+              parts: completionDraft.parts.split(',').map((part) => part.trim()).filter(Boolean),
+              laborMinutes: Number(completionDraft.laborMinutes),
+              finalPriceCents: Math.round(Number(completionDraft.finalPrice) * 100),
+              outcome: completionDraft.outcome,
+              aiAssessmentOutcome: completionDraft.aiAssessmentOutcome,
+            },
+          }
+        : {}
+    if (action === 'complete' && !completionDraft.issue.trim()) {
+      setProviderMessage('Enter the field-confirmed issue before completing work.')
+      return
+    }
+    const response = await fetch(`/api/provider/service-bookings/${booking.id}/${action}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+    setProviderMessage(response.ok ? `Service booking ${action} recorded.` : 'Service booking could not be updated.')
+    if (response.ok) await refreshProviderWorkOrders()
   }
 
   const dispatchAdminBooking = async (bookingId: string, safetyReviewed: boolean) => {
@@ -612,6 +710,16 @@ function App() {
               ))}
             </div>
           </div>
+          <div className="workspace-card notification-center">
+            <h3>Notifications</h3>
+            {homeownerNotifications.length === 0 ? <p className="empty-state">No notifications.</p> : homeownerNotifications.map((notification) => (
+              <article key={notification.id} className={notification.readAt ? 'read' : 'unread'}>
+                <div><strong>{notification.title}</strong><b>{notification.type}</b></div>
+                <p>{notification.message}</p>
+                {!notification.readAt && <button onClick={() => readHomeownerNotification(notification.id)}>Mark read</button>}
+              </article>
+            ))}
+          </div>
           {homeownerMessage && <p className="workspace-message" role="status">{homeownerMessage}</p>}
         </section>
       )}
@@ -626,7 +734,7 @@ function App() {
           <div className="workspace-metrics">
             <div><span>Completed jobs</span><strong>{providerEarnings.completedJobs}</strong></div>
             <div><span>Recorded gross revenue</span><strong>${providerEarnings.grossRevenueCents / 100}</strong></div>
-            <div><span>Open work</span><strong>{providerWorkOrders.filter((workOrder) => !['completed', 'cancelled'].includes(workOrder.status)).length}</strong></div>
+            <div><span>Open work</span><strong>{providerWorkOrders.filter((workOrder) => !['completed', 'cancelled'].includes(workOrder.status)).length + providerServiceBookings.filter((booking) => !['completed', 'cancelled'].includes(booking.status)).length}</strong></div>
           </div>
           <div className="workspace-grid">
             <form className="workspace-card" onSubmit={createPricebookItem}>
@@ -654,7 +762,13 @@ function App() {
             </form>
             <div className="workspace-card booking-list">
               <h3>Assigned work</h3>
-              {providerWorkOrders.length === 0 ? <p className="empty-state">No assigned work orders.</p> : providerWorkOrders.map((workOrder) => <article key={workOrder.id}><div><strong>{workOrder.customerName ?? workOrder.summary}</strong><b>{workOrder.status}</b></div><p>{workOrder.propertyAddress ?? workOrder.summary}</p><p>{workOrder.service.replaceAll('_', ' ')}</p></article>)}
+              {(providerWorkOrders.some((workOrder) => workOrder.status === 'scheduled') || providerServiceBookings.some((booking) => booking.status === 'scheduled')) && <div className="completion-fields">
+                <label>Field-confirmed issue<input value={completionDraft.issue} onChange={(event) => setCompletionDraft({ ...completionDraft, issue: event.target.value })} /></label>
+                <label>Parts, comma separated<input value={completionDraft.parts} onChange={(event) => setCompletionDraft({ ...completionDraft, parts: event.target.value })} /></label>
+                <div className="field-row"><label>Labor minutes<input type="number" value={completionDraft.laborMinutes} onChange={(event) => setCompletionDraft({ ...completionDraft, laborMinutes: event.target.value })} /></label><label>Final price $<input type="number" value={completionDraft.finalPrice} onChange={(event) => setCompletionDraft({ ...completionDraft, finalPrice: event.target.value })} /></label></div>
+              </div>}
+              {providerWorkOrders.length === 0 && providerServiceBookings.length === 0 ? <p className="empty-state">No assigned work orders.</p> : providerWorkOrders.map((workOrder) => <article key={workOrder.id}><div><strong>{workOrder.customerName ?? workOrder.summary}</strong><b>{workOrder.status}</b></div><p>{workOrder.propertyAddress ?? workOrder.summary}</p><p>{workOrder.service.replaceAll('_', ' ')}</p>{['offered','accepted','scheduled'].includes(workOrder.status) && <button onClick={() => advanceProviderWorkOrder(workOrder)}>{workOrder.status === 'offered' ? 'Accept work' : workOrder.status === 'accepted' ? 'Schedule next available day' : 'Complete with field outcome'}</button>}</article>)}
+              {providerServiceBookings.map((booking) => <article key={booking.id}><div><strong>{booking.symptomSummary}</strong><b>{booking.status}</b></div><p>{booking.service.replaceAll('_', ' ')}</p>{['assigned','scheduled'].includes(booking.status) && <button onClick={() => advanceProviderBooking(booking)}>{booking.status === 'assigned' && !booking.providerAcceptedAt ? 'Accept work' : booking.status === 'assigned' ? 'Schedule next available day' : 'Complete with field outcome'}</button>}</article>)}
             </div>
           </div>
           {providerMessage && <p className="workspace-message" role="status">{providerMessage}</p>}

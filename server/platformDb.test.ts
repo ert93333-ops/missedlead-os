@@ -22,6 +22,10 @@ describe('platform homeowner data', () => {
     })
     expect(created).toMatchObject({ booking: { status: 'requested', organizationId: 'household-1' } })
     expect(store.listBookings('household-2')).toEqual([])
+    const notification = store.listNotifications('household-1')[0]
+    expect(notification).toMatchObject({ type: 'booking', title: 'Service request received', readAt: null })
+    expect(store.markNotificationRead(notification.id, 'household-2')).toBeNull()
+    expect(store.markNotificationRead(notification.id, 'household-1')?.readAt).not.toBeNull()
   })
 
   it('routes safety bookings to human review and rejects duplicate property slots', () => {
@@ -66,8 +70,20 @@ describe('platform homeowner data', () => {
       estimateLowCents: null, estimateHighCents: null,
     })
     if (!('booking' in created)) throw new Error('booking not created')
-    expect(store.dispatchBooking(created.booking.id, 'provider-1', false)).toEqual({ error: 'safety_review_required' })
-    expect(store.dispatchBooking(created.booking.id, 'provider-1', true)).toMatchObject({ booking: { status: 'assigned', assignedProviderId: 'provider-1' } })
+    expect(store.dispatchBooking(created.booking.id, 'provider-1', 'provider-org', false)).toEqual({ error: 'safety_review_required' })
+    expect(store.dispatchBooking(created.booking.id, 'provider-1', 'provider-org', true)).toMatchObject({
+      booking: { status: 'assigned', assignedProviderId: 'provider-1', assignedProviderOrganizationId: 'provider-org' },
+    })
+    expect(store.acceptProviderBooking(created.booking.id, 'other-org')).toBeNull()
+    expect(store.acceptProviderBooking(created.booking.id, 'provider-org')).toMatchObject({ providerAcceptedAt: expect.any(String) })
+    expect(store.scheduleProviderBooking(created.booking.id, 'provider-org', '2026-09-04T15:00:00.000Z'))
+      .toMatchObject({ status: 'scheduled' })
+    expect(store.completeProviderBooking(created.booking.id, 'provider-org', {
+      technicianConfirmedIssue: 'Failed capacitor', parts: ['capacitor'], laborMinutes: 45,
+      finalPriceCents: 29900, outcome: 'resolved', aiAssessmentOutcome: 'corrected',
+    })).toMatchObject({ status: 'completed', finalOutcome: { finalPriceCents: 29900 } })
+    expect(store.listNotifications('household-1').map((notification) => notification.type))
+      .toEqual(expect.arrayContaining(['safety', 'dispatch']))
 
     expect(store.setProviderControl({
       organizationId: 'provider-org', status: 'suspended', licenseExpiresAt: null,

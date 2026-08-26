@@ -183,9 +183,27 @@ describe('authentication', () => {
     const admin = request.agent(app)
     await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
     await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
-      .send({ providerId: 'provider-1', safetyReviewed: false }).expect(409, { error: 'safety_review_required' })
+      .send({ providerId: 'provider-1', providerOrganizationId: 'provider-org', safetyReviewed: false })
+      .expect(409, { error: 'safety_review_required' })
     await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
-      .send({ providerId: 'provider-1', safetyReviewed: true }).expect(200)
+      .send({ providerId: 'provider-1', providerOrganizationId: 'provider-org', safetyReviewed: true }).expect(200)
+    const provider = request.agent(app)
+    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
+    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/accept`).send({}).expect(200)
+    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/schedule`)
+      .send({ scheduledAt: '2026-09-03T15:00:00.000Z' }).expect(200)
+    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/complete`).send({
+      finalOutcome: {
+        technicianConfirmedIssue: 'Failed blower capacitor',
+        parts: ['45/5 capacitor'],
+        laborMinutes: 55,
+        finalPriceCents: 32900,
+        outcome: 'resolved',
+        aiAssessmentOutcome: 'corrected',
+      },
+    }).expect(200)
+    expect((await provider.get('/api/provider/work-orders').expect(200)).body.earnings)
+      .toEqual({ completedJobs: 1, grossRevenueCents: 32900 })
     await admin.post('/api/admin/provider-controls').send({
       organizationId: 'provider-org', status: 'suspended', licenseExpiresAt: null,
       insuranceExpiresAt: null, reason: 'Insurance verification expired',

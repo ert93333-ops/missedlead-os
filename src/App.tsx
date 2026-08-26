@@ -25,6 +25,25 @@ type PortalSession = {
   displayName: string
   role: PortalRole
 }
+type HomeownerProperty = {
+  id: string
+  customerName: string
+  addressLine1: string
+  city: string
+  state: string
+  county: string
+  postalCode: string
+}
+type HomeownerBooking = {
+  id: string
+  propertyId: string
+  service: string
+  preferredStart: string
+  status: string
+  safetyStop: boolean
+  estimateLowCents: number | null
+  estimateHighCents: number | null
+}
 const demoHomeCareTeam: HomeCareTeam = {
   propertyId: 'charlotte-home',
   coordinatorId: 'coordinator-1',
@@ -49,6 +68,16 @@ function App() {
   const [session, setSession] = useState<'checking' | 'authenticated' | 'anonymous'>('checking')
   const [portalSession, setPortalSession] = useState<PortalSession | null>(null)
   const [email, setEmail] = useState('')
+  const [homeownerProperties, setHomeownerProperties] = useState<HomeownerProperty[]>([])
+  const [homeownerBookings, setHomeownerBookings] = useState<HomeownerBooking[]>([])
+  const [propertyDraft, setPropertyDraft] = useState({
+    customerName: '', addressLine1: '', city: 'Charlotte', state: 'NC', county: 'Mecklenburg', postalCode: '',
+  })
+  const [bookingDraft, setBookingDraft] = useState({
+    propertyId: '', service: 'recurring_cleaning', preferredStart: '', symptomSummary: 'Biweekly home cleaning',
+    safetyStop: false, squareFeet: '2200', bathrooms: '2', frequency: 'biweekly', deepClean: false, pets: false,
+  })
+  const [homeownerMessage, setHomeownerMessage] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [loginError, setLoginError] = useState('')
   const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
@@ -128,6 +157,19 @@ function App() {
       })
       .catch(() => setSession('anonymous'))
   }, [])
+
+  useEffect(() => {
+    if (portalSession?.role !== 'homeowner') return
+    Promise.all([
+      fetch('/api/homeowner/properties').then((response) => response.ok ? response.json() : { properties: [] }),
+      fetch('/api/homeowner/bookings').then((response) => response.ok ? response.json() : { bookings: [] }),
+    ]).then(([propertiesResult, bookingsResult]) => {
+      const properties = (propertiesResult as { properties: HomeownerProperty[] }).properties
+      setHomeownerProperties(properties)
+      setHomeownerBookings((bookingsResult as { bookings: HomeownerBooking[] }).bookings)
+      if (properties[0]) setBookingDraft((draft) => ({ ...draft, propertyId: draft.propertyId || properties[0].id }))
+    }).catch(() => setHomeownerMessage('Home data could not be loaded.'))
+  }, [portalSession])
 
   const login = async (event: FormEvent) => {
     event.preventDefault()
@@ -273,6 +315,59 @@ function App() {
     setThresholdEvents((events) => events.map((event) => event.id === eventId ? { ...event, status: 'acknowledged' } : event))
   }
 
+  const createHomeownerProperty = async (event: FormEvent) => {
+    event.preventDefault()
+    setHomeownerMessage('')
+    const response = await fetch('/api/homeowner/properties', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(propertyDraft),
+    })
+    const result = await response.json() as { property?: HomeownerProperty; issues?: string[] }
+    if (!response.ok || !result.property) {
+      setHomeownerMessage(result.issues?.join(' ') ?? 'Property could not be added.')
+      return
+    }
+    setHomeownerProperties((properties) => [result.property!, ...properties])
+    setBookingDraft((draft) => ({ ...draft, propertyId: result.property!.id }))
+    setPropertyDraft((draft) => ({ ...draft, customerName: '', addressLine1: '', postalCode: '' }))
+    setHomeownerMessage('Charlotte property added.')
+  }
+
+  const createHomeownerBooking = async (event: FormEvent) => {
+    event.preventDefault()
+    setHomeownerMessage('')
+    const preferredStart = bookingDraft.preferredStart ? new Date(bookingDraft.preferredStart).toISOString() : ''
+    const response = await fetch('/api/homeowner/bookings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        propertyId: bookingDraft.propertyId,
+        service: bookingDraft.service,
+        preferredStart,
+        symptomSummary: bookingDraft.symptomSummary,
+        safetyStop: bookingDraft.safetyStop,
+        confidence: 0,
+        cleaningScope: bookingDraft.service === 'recurring_cleaning' ? {
+          squareFeet: Number(bookingDraft.squareFeet),
+          bathrooms: Number(bookingDraft.bathrooms),
+          frequency: bookingDraft.frequency,
+          deepClean: bookingDraft.deepClean,
+          pets: bookingDraft.pets,
+        } : undefined,
+      }),
+    })
+    const result = await response.json() as { booking?: HomeownerBooking; error?: string }
+    if (!response.ok || !result.booking) {
+      setHomeownerMessage(result.error === 'booking_slot_conflict'
+        ? 'That home already has an active request at the selected time.'
+        : 'Service request could not be created.')
+      return
+    }
+    setHomeownerBookings((bookings) => [result.booking!, ...bookings])
+    setHomeownerMessage(result.booking.safetyStop
+      ? 'Safety concern routed to human review. Automated pricing and normal booking are stopped.'
+      : 'Service request submitted with a preliminary price range.')
+  }
+
   if (session !== 'authenticated') {
     return (
       <main className="login-shell">
@@ -314,6 +409,61 @@ function App() {
           <div><dt>Access role</dt><dd>{portalSession?.role}</dd></div>
         </dl>
       </section>
+
+      {portalSession?.role === 'homeowner' && (
+        <section className="role-workspace" aria-labelledby="homeowner-workspace-title">
+          <div className="workspace-heading">
+            <p className="eyebrow">HOMEOWNER ONBOARDING</p>
+            <h2 id="homeowner-workspace-title">Add your Charlotte home and request care.</h2>
+            <p>Only Mecklenburg County 282xx addresses are accepted during the pilot.</p>
+          </div>
+          <div className="workspace-grid">
+            <form className="workspace-card" onSubmit={createHomeownerProperty}>
+              <h3>Property</h3>
+              <label>Home or customer name<input required value={propertyDraft.customerName} onChange={(event) => setPropertyDraft({ ...propertyDraft, customerName: event.target.value })} /></label>
+              <label>Street address<input required value={propertyDraft.addressLine1} onChange={(event) => setPropertyDraft({ ...propertyDraft, addressLine1: event.target.value })} /></label>
+              <div className="field-row">
+                <label>City<input required value={propertyDraft.city} onChange={(event) => setPropertyDraft({ ...propertyDraft, city: event.target.value })} /></label>
+                <label>ZIP<input required inputMode="numeric" pattern="\d{5}" value={propertyDraft.postalCode} onChange={(event) => setPropertyDraft({ ...propertyDraft, postalCode: event.target.value })} /></label>
+              </div>
+              <button type="submit">Add Charlotte property</button>
+            </form>
+            <form className="workspace-card" onSubmit={createHomeownerBooking}>
+              <h3>Service request</h3>
+              <label>Property<select required value={bookingDraft.propertyId} onChange={(event) => setBookingDraft({ ...bookingDraft, propertyId: event.target.value })}>
+                <option value="">Select a property</option>
+                {homeownerProperties.map((property) => <option key={property.id} value={property.id}>{property.addressLine1}</option>)}
+              </select></label>
+              <label>Service<select value={bookingDraft.service} onChange={(event) => setBookingDraft({ ...bookingDraft, service: event.target.value })}>
+                <option value="recurring_cleaning">Recurring cleaning</option>
+                <option value="home_care_visit">Home Care Visit</option>
+                <option value="hvac_service">HVAC service</option>
+                <option value="plumbing_service">Plumbing service</option>
+                <option value="handyman_visit">Handyman visit</option>
+              </select></label>
+              <label>Preferred time<input required type="datetime-local" value={bookingDraft.preferredStart} onChange={(event) => setBookingDraft({ ...bookingDraft, preferredStart: event.target.value })} /></label>
+              <label>What do you need?<textarea required value={bookingDraft.symptomSummary} onChange={(event) => setBookingDraft({ ...bookingDraft, symptomSummary: event.target.value })} /></label>
+              {bookingDraft.service === 'recurring_cleaning' && <div className="field-row">
+                <label>Square feet<input type="number" min="200" value={bookingDraft.squareFeet} onChange={(event) => setBookingDraft({ ...bookingDraft, squareFeet: event.target.value })} /></label>
+                <label>Bathrooms<input type="number" min="0" value={bookingDraft.bathrooms} onChange={(event) => setBookingDraft({ ...bookingDraft, bathrooms: event.target.value })} /></label>
+              </div>}
+              <label className="safety-check"><input type="checkbox" checked={bookingDraft.safetyStop} onChange={(event) => setBookingDraft({ ...bookingDraft, safetyStop: event.target.checked })} /> There is smoke, gas/CO concern, active sparking, sewage, flooding near electricity, or another immediate danger.</label>
+              <button type="submit" disabled={!bookingDraft.propertyId}>Request service</button>
+            </form>
+            <div className="workspace-card booking-list">
+              <h3>Current requests</h3>
+              {homeownerBookings.length === 0 ? <p className="empty-state">No service requests yet.</p> : homeownerBookings.map((booking) => (
+                <article key={booking.id}>
+                  <div><strong>{booking.service.replaceAll('_', ' ')}</strong><b>{booking.status}</b></div>
+                  <time>{new Date(booking.preferredStart).toLocaleString()}</time>
+                  <p>{booking.estimateLowCents === null ? 'Pricing blocked pending human safety review.' : `$${booking.estimateLowCents / 100}–$${booking.estimateHighCents! / 100} preliminary range`}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+          {homeownerMessage && <p className="workspace-message" role="status">{homeownerMessage}</p>}
+        </section>
+      )}
 
       <section className="hero-panel">
         <div>

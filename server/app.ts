@@ -15,7 +15,9 @@ import { createAuth, type AuthConfig } from './auth'
 import type { MaintenanceStore } from './maintenanceDb'
 import { validatePlanCompliance } from '../src/maintenance'
 import { evaluateEvidenceProtocol, listEvidenceProtocols } from '../src/evidenceProtocols'
-import { charlottePilotJurisdiction } from '../src/jurisdiction'
+import { charlottePilotJurisdiction, validateServiceAddress } from '../src/jurisdiction'
+import { estimateCleaningRange } from '../src/homeCare'
+import type { PlatformStore } from './platformDb'
 
 const evidenceSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -138,6 +140,29 @@ const finalOutcomeSchema = z.object({
   outcome: z.enum(['resolved', 'follow_up_required', 'no_fault_found']),
   aiAssessmentOutcome: z.enum(['accepted', 'corrected', 'rejected']),
 })
+const platformPropertySchema = z.object({
+  customerName: z.string().trim().min(1).max(120),
+  addressLine1: z.string().trim().min(3).max(200),
+  city: z.string().trim().min(2).max(100),
+  state: z.string().trim().length(2),
+  county: z.string().trim().min(2).max(100),
+  postalCode: z.string().regex(/^\d{5}$/),
+})
+const bookingSchema = z.object({
+  propertyId: z.string().uuid(),
+  service: z.enum(['recurring_cleaning', 'home_care_visit', 'hvac_service', 'plumbing_service', 'handyman_visit']),
+  preferredStart: z.iso.datetime(),
+  symptomSummary: z.string().trim().min(1).max(1000),
+  safetyStop: z.boolean(),
+  confidence: z.number().min(0).max(100).optional(),
+  cleaningScope: z.object({
+    squareFeet: z.number().int().min(200).max(20_000),
+    bathrooms: z.number().int().min(0).max(20),
+    frequency: z.enum(['weekly', 'biweekly', 'monthly', 'one_time']),
+    deepClean: z.boolean(),
+    pets: z.boolean(),
+  }).optional(),
+})
 
 function presentCase(serviceCase: ReturnType<CaseStore['create']>) {
   const estimate = buildEstimate(serviceCase.evidence, serviceCase.summary)
@@ -158,6 +183,7 @@ export function createApp(store: CaseStore, options: {
   evidenceStorage?: EvidenceStorage
   auth?: AuthConfig
   maintenance?: MaintenanceStore
+  platform?: PlatformStore
 } = {}) {
   const app = express()
   const auth = createAuth(options.auth)
@@ -185,6 +211,88 @@ export function createApp(store: CaseStore, options: {
   app.get('/api/homeowner/health', auth.requireRole('homeowner', 'admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
   app.get('/api/provider/health', auth.requireRole('provider', 'admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
   app.get('/api/admin/health', auth.requireRole('admin'), (_request, response) => response.json({ role: response.locals.authSession.role }))
+  app.use('/api/homeowner', auth.requireRole('homeowner', 'admin'))
+  app.post('/api/homeowner/properties', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = platformPropertySchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_property', issues: parsed.error.issues })
+      return
+    }
+    const normalized = { ...parsed.data, state: parsed.data.state.toUpperCase() }
+    const boundaryErrors = validateServiceAddress(normalized)
+    if (boundaryErrors.length > 0) {
+      response.status(400).json({ error: 'property_outside_service_area', issues: boundaryErrors })
+      return
+    }
+    response.status(201).json({ property: options.platform.createProperty({
+      ...normalized,
+      organizationId: response.locals.authSession.organizationId,
+    }) })
+  })
+  app.get('/api/homeowner/properties', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    response.json({ properties: options.platform.listProperties(response.locals.authSession.organizationId) })
+  })
+  app.post('/api/homeowner/bookings', (request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    const parsed = bookingSchema.safeParse(request.body)
+    if (!parsed.success) {
+      response.status(400).json({ error: 'invalid_booking', issues: parsed.error.issues })
+      return
+    }
+    const property = options.platform.findProperty(parsed.data.propertyId, response.locals.authSession.organizationId)
+    if (!property) {
+      response.status(404).json({ error: 'property_not_found' })
+      return
+    }
+    let estimateLowCents: number | null = null
+    let estimateHighCents: number | null = null
+    if (!parsed.data.safetyStop && parsed.data.service === 'recurring_cleaning' && parsed.data.cleaningScope) {
+      const estimate = estimateCleaningRange(parsed.data.cleaningScope)
+      estimateLowCents = estimate.lowCents
+      estimateHighCents = estimate.highCents
+    } else if (!parsed.data.safetyStop && parsed.data.service !== 'recurring_cleaning') {
+      const estimate = calculateTransparentPrice(defaultPricingPolicy, {
+        confidence: parsed.data.confidence ?? 0,
+        afterHours: false,
+        safetyEscalation: false,
+      })
+      estimateLowCents = Math.round(estimate.low * 100)
+      estimateHighCents = Math.round(estimate.high * 100)
+    }
+    const result = options.platform.createBooking({
+      organizationId: response.locals.authSession.organizationId,
+      propertyId: property.id,
+      service: parsed.data.service,
+      preferredStart: parsed.data.preferredStart,
+      safetyStop: parsed.data.safetyStop,
+      symptomSummary: parsed.data.symptomSummary,
+      estimateLowCents,
+      estimateHighCents,
+    })
+    if ('error' in result) {
+      response.status(409).json({ error: result.error })
+      return
+    }
+    response.status(201).json(result)
+  })
+  app.get('/api/homeowner/bookings', (_request, response) => {
+    if (!options.platform) {
+      response.status(503).json({ error: 'platform_store_not_configured' })
+      return
+    }
+    response.json({ bookings: options.platform.listBookings(response.locals.authSession.organizationId) })
+  })
 
   app.post('/api/calls/next', auth.requireSession, (request, response) => {
     const parsed = callTurnSchema.safeParse(request.body)

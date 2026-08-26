@@ -9,21 +9,25 @@ import { createEvidenceStorage, type EvidenceStorage } from './evidenceStorage'
 import type { AuthConfig } from './auth'
 import { createMaintenanceStore, type MaintenanceStore } from './maintenanceDb'
 import { charlottePilotTerms } from '../src/maintenance'
+import { createPlatformStore, type PlatformStore } from './platformDb'
 
 let store: CaseStore
 let evidenceStorage: EvidenceStorage
 let evidenceRoot: string
 let maintenance: MaintenanceStore
+let platform: PlatformStore
 
 beforeEach(async () => {
   store = createCaseStore(':memory:')
   evidenceRoot = await mkdtemp(join(tmpdir(), 'missedlead-evidence-'))
   evidenceStorage = createEvidenceStorage(evidenceRoot)
   maintenance = createMaintenanceStore(':memory:')
+  platform = createPlatformStore(':memory:')
 })
 afterEach(async () => {
   store.close()
   maintenance.close()
+  platform.close()
   await rm(evidenceRoot, { recursive: true, force: true })
 })
 
@@ -125,6 +129,53 @@ describe('authentication', () => {
     const admin = request.agent(app)
     await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
     await admin.get(`/api/maintenance/memberships/${created.body.membership.id}`).expect(200)
+  })
+
+  it('onboards a Charlotte property and creates conflict-safe homeowner bookings', async () => {
+    const app = createApp(store, { auth: roleAuth, platform })
+    const owner = request.agent(app)
+    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
+    await owner.post('/api/homeowner/properties').send({
+      customerName: 'Home Owner', addressLine1: '1 Main St', city: 'Fort Mill',
+      state: 'SC', county: 'York', postalCode: '29715',
+    }).expect(400, {
+      error: 'property_outside_service_area',
+      issues: ['SC is not supported during the Charlotte pilot', 'Service is currently limited to Mecklenburg County', 'Postal code is outside the Charlotte pilot area'],
+    })
+    const created = await owner.post('/api/homeowner/properties').send({
+      customerName: 'Home Owner', addressLine1: '1200 South Blvd', city: 'Charlotte',
+      state: 'nc', county: 'Mecklenburg', postalCode: '28210',
+    }).expect(201)
+    const propertyId = created.body.property.id
+    const bookingInput = {
+      propertyId,
+      service: 'recurring_cleaning',
+      preferredStart: '2026-09-01T14:00:00.000Z',
+      symptomSummary: 'Biweekly cleaning',
+      safetyStop: false,
+      cleaningScope: { squareFeet: 2200, bathrooms: 2, frequency: 'biweekly', deepClean: false, pets: true },
+    }
+    const booking = await owner.post('/api/homeowner/bookings').send(bookingInput).expect(201)
+    expect(booking.body.booking).toMatchObject({
+      status: 'requested', estimateLowCents: 15400, estimateHighCents: 21700,
+    })
+    await owner.post('/api/homeowner/bookings').send(bookingInput).expect(409, { error: 'booking_slot_conflict' })
+    const safetyBooking = await owner.post('/api/homeowner/bookings').send({
+      ...bookingInput,
+      service: 'hvac_service',
+      preferredStart: '2026-09-03T14:00:00.000Z',
+      symptomSummary: 'Burning odor and repeated breaker trip',
+      safetyStop: true,
+      cleaningScope: undefined,
+    }).expect(201)
+    expect(safetyBooking.body.booking).toMatchObject({
+      status: 'human_review', safetyStop: true, estimateLowCents: null, estimateHighCents: null,
+    })
+
+    const other = request.agent(app)
+    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
+    await other.post('/api/homeowner/bookings').send({ ...bookingInput, preferredStart: '2026-09-02T14:00:00.000Z' })
+      .expect(404, { error: 'property_not_found' })
   })
 })
 

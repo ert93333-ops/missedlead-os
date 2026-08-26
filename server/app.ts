@@ -19,6 +19,7 @@ import { charlottePilotJurisdiction, validateServiceAddress } from '../src/juris
 import { estimateCleaningRange } from '../src/homeCare'
 import type { PlatformStore } from './platformDb'
 import type { IdentityStore } from './identityDb'
+import { prepareMediaForAnalysis } from './mediaPreprocessor'
 
 const evidenceSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -1082,10 +1083,14 @@ export function createApp(store: CaseStore, options: {
         return
       }
       try {
-        const analysis = await options.multimodal(request.file.buffer, request.file.mimetype, serviceCase.summary)
-        response.json({ analysis })
-      } catch {
-        response.status(502).json({ error: 'multimodal_analysis_failed' })
+        const prepared = await prepareMediaForAnalysis(request.file.buffer, request.file.mimetype)
+        const analysis = await options.multimodal(prepared.bytes, prepared.mediaType, serviceCase.summary)
+        response.json({ analysis: { ...analysis, mediaSource: prepared.source } })
+      } catch (error) {
+        const extractionFailed = error instanceof Error && error.message === 'video_frame_extraction_failed'
+        response.status(extractionFailed ? 422 : 502).json({
+          error: extractionFailed ? 'video_frame_extraction_failed' : 'multimodal_analysis_failed',
+        })
       }
     })
   })

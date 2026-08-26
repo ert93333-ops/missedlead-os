@@ -362,6 +362,10 @@ describe('case API', () => {
     const analyzed = await configured.post(`/api/cases/${created.body.case.id}/evidence/analyze`)
       .attach('evidence', Buffer.from('image'), { filename: 'leak.jpg', contentType: 'image/jpeg' }).expect(200)
     expect(analyzed.body.analysis.observations).toEqual(['Visible moisture near a drain joint'])
+    expect(analyzed.body.analysis.mediaSource).toBe('original_image')
+    await configured.post(`/api/cases/${created.body.case.id}/evidence/analyze`)
+      .attach('evidence', Buffer.from('not-a-video'), { filename: 'leak.mp4', contentType: 'video/mp4' })
+      .expect(422, { error: 'video_frame_extraction_failed' })
   })
 })
 

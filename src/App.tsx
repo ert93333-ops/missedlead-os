@@ -1,1133 +1,136 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
-import { buildEstimate, validateCase, type Evidence } from './domain'
-import { rankHypotheses, type DiagnosticSignal } from './diagnosis'
-import { calculateTransparentPrice, defaultPricingPolicy } from './pricing'
-import { defaultMaintenanceTerms } from './maintenance'
-import { annualMembershipEconomics, completedRepairFee } from './marketplace'
-import { evaluateEvidenceProtocol, listEvidenceProtocols, type ProtocolId } from './evidenceProtocols'
-import { charlottePilotJurisdiction } from './jurisdiction'
-import { estimateCleaningRange, matchHomeCareProviders, type HomeCareTeam, type ServiceProvider } from './homeCare'
-import './App.css'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import "./styles.css";
+import { AuthProvider, type AuthValue, type Role } from "./app/auth";
+import { RoleRouter } from "./app/router";
+import { ChatIntake } from "./app/chat/ChatIntake";
+import { AttachmentGallery } from "./app/chat/AttachmentGallery";
 
-const initialEvidence: Evidence[] = [
-  { label: 'Leak overview video', observed: true, weight: 18 },
-  { label: 'P-trap close-up', observed: true, weight: 16 },
-  { label: 'Meter movement test', observed: false, weight: 20 },
-  { label: 'Supply valve photo', observed: false, weight: 14 },
-]
-const protocolCatalog = listEvidenceProtocols()
-type PortalRole = 'homeowner' | 'provider' | 'admin'
-type PortalSession = {
-  id: string
-  organizationId: string
-  email: string
-  displayName: string
-  role: PortalRole
-}
-type HomeownerProperty = {
-  id: string
-  customerName: string
-  addressLine1: string
-  city: string
-  state: string
-  county: string
-  postalCode: string
-}
-type HomeownerBooking = {
-  id: string
-  propertyId: string
-  service: string
-  preferredStart: string
-  status: string
-  safetyStop: boolean
-  estimateLowCents: number | null
-  estimateHighCents: number | null
-}
-type HomeownerNotification = {
-  id: string
-  type: string
-  title: string
-  message: string
-  readAt: string | null
-  createdAt: string
-}
-type ProviderPricebookItem = {
-  id: string
-  service: string
-  label: string
-  baseFeeCents: number
-  laborLowCents: number
-  laborHighCents: number
-  active: boolean
-}
-type ProviderWorkOrder = {
-  id: string
-  service: string
-  summary: string
-  status: string
-  scheduledAt: string | null
-  finalOutcome: null | { finalPriceCents: number; outcome: string; aiAssessmentOutcome: string }
-  customerName?: string
-  propertyAddress?: string
-}
-type AdminBooking = HomeownerBooking & { organizationId: string; symptomSummary: string; assignedProviderId: string | null }
-type ProviderServiceBooking = AdminBooking & { providerAcceptedAt: string | null }
-type AdminDispute = { id: string; organizationId: string; category: string; summary: string; status: string; resolution: string | null }
-type AdminOperations = {
-  bookings: AdminBooking[]
-  disputes: AdminDispute[]
-  providerControls: { organizationId: string; status: string; reason: string }[]
-  auditLogs: { id: string; action: string; targetType: string; targetId: string; createdAt: string }[]
-  queues: { safetyReview: number; unassigned: number }
-}
-type AdminIdentityUser = {
-  id: string
-  organizationId: string
-  email: string
-  displayName: string
-  role: PortalRole
-  active: boolean
-}
-const demoHomeCareTeam: HomeCareTeam = {
-  propertyId: 'charlotte-home',
-  coordinatorId: 'coordinator-1',
-  assignedProviderIds: ['cleaner-1'],
-  backupProviderIds: ['cleaner-2'],
-}
-const demoProviders: ServiceProvider[] = [
-  { id: 'cleaner-1', ownerOrganizationId: 'queen-city-care', name: 'Maya · Primary home care provider', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
-  { id: 'cleaner-2', ownerOrganizationId: 'queen-city-backup', name: 'Queen City Care · Backup team', role: 'primary_cleaner', trade: 'cleaning', active: true, licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: false },
-]
+type ServiceRequest = { id: string; customerName: string; description: string; address: string; safetyStatus: "pending" | "cleared" | "blocked"; hazardReason?: string; status: string; providerIds: string[]; expandedSearch: boolean; workScopeSnapshot?:Record<string,unknown>; triageSnapshot?:Record<string,unknown>; priceDisclosure?:{source:string;sampleCount:number;updatedAt:string;confidence:number;priceCents?:number}; createdAt: string };
+type Quote = { id: string; requestId: string; providerName: string; scope: string; amountCents: number; explorationSelected?:boolean; rankingScore: number; rankingPolicyVersion: number; ranking: { totalCents: number; earliestStartAt: string; warrantyDays: number; licenseVerified?: boolean; insuranceVerified?: boolean; rating?: number; distanceMiles?: number; responseMinutes?: number; languages?: string[] } };
+type Change = { id: string; requestId: string; description: string; amountCents: number; items: { description: string; quantity: number; unitCents: number }[]; evidenceIds: string[]; approvedAt?: string };
+type Job = { requestId: string; quoteId: string; depositCents: number; completedAt?: string; settledAt?: string };
+type Dispute = { id: string; requestId: string; source: "internal" | "external"; reason: string; status: string };
+type Evidence = { id: string; requestId: string; kind: "before" | "during" | "after" | "receipt" | "warranty"; note: string };
+type Audit = { id: string; action: string; requestId?: string; at: string };
+type Payment = { id: string; requestId: string; kind: string; amountCents: number; status?: string };
+type Dashboard = { requests: ServiceRequest[]; quotes: Quote[]; changes: Change[]; jobs: Job[]; disputes: Dispute[]; evidence: Evidence[]; payments: Payment[]; audit: Audit[] };
+type Caller = <T>(path: string, method?: string, body?: unknown, key?: string) => Promise<T>;
+type Action = (work: () => Promise<unknown>, success: string) => Promise<void>;
 
-function loadEvidence(): Evidence[] {
-  try {
-    const saved = localStorage.getItem('missedlead:evidence')
-    return saved ? JSON.parse(saved) as Evidence[] : initialEvidence
-  } catch {
-    return initialEvidence
-  }
+const EMPTY: Dashboard = { requests: [], quotes: [], changes: [], jobs: [], disputes: [], evidence: [], payments: [], audit: [] };
+const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+const statusLabel: Record<string, string> = { intake: "접수", matched: "매칭", quoted: "견적 도착", funded: "보증금 결제", in_progress: "작업 중", completed: "72시간 보호 중", settled: "정산 완료" };
+const customerStatusLabel: Record<"en" | "es", Record<string, string>> = { en: { intake: "Request received", matched: "Matching", quoted: "Quotes ready", funded: "Deposit paid", in_progress: "Work in progress", completed: "Protection period", settled: "Complete" }, es: { intake: "Solicitud recibida", matched: "Buscando técnicos", quoted: "Presupuestos listos", funded: "Depósito pagado", in_progress: "Trabajo en curso", completed: "Período de protección", settled: "Completado" } };
+
+async function api<T>(token: string, path: string, method = "GET", body?: unknown, idempotencyKey?: string): Promise<T> {
+  const response = await fetch(path, { method, headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await response.json() as T & { error?: string; guidance?: string };
+  if (!response.ok) throw new Error(data.guidance ?? data.error ?? "요청을 처리하지 못했습니다.");
+  return data;
 }
 
-function nextAvailableDay(): string {
-  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+async function confirmStripePayment(clientSecret: string) {
+  const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
+  if (!publishableKey) throw new Error("Stripe 공개 키가 설정되지 않았습니다.");
+  type StripeFactory = (key: string) => { confirmPayment: (options: { clientSecret: string; confirmParams: { return_url: string }; redirect: "if_required" }) => Promise<{ error?: { message?: string } }> };
+  const stripeWindow = window as Window & { Stripe?: StripeFactory };
+  if (!stripeWindow.Stripe) await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.stripe.com/v3/"]');
+    const script = existing ?? Object.assign(document.createElement("script"), { src: "https://js.stripe.com/v3/", async: true });
+    script.addEventListener("load", () => resolve(), { once: true });
+    script.addEventListener("error", () => reject(new Error("Stripe 결제 화면을 불러오지 못했습니다.")), { once: true });
+    if (!existing) document.head.append(script);
+  });
+  const stripe = stripeWindow.Stripe?.(publishableKey);
+  if (!stripe) throw new Error("Stripe 결제를 초기화하지 못했습니다.");
+  const result = await stripe.confirmPayment({ clientSecret, confirmParams: { return_url: window.location.href }, redirect: "if_required" });
+  if (result.error) throw new Error(result.error.message ?? "결제를 확인하지 못했습니다.");
 }
 
-function App() {
-  const [session, setSession] = useState<'checking' | 'authenticated' | 'anonymous'>('checking')
-  const [portalSession, setPortalSession] = useState<PortalSession | null>(null)
-  const [email, setEmail] = useState('')
-  const [homeownerProperties, setHomeownerProperties] = useState<HomeownerProperty[]>([])
-  const [homeownerBookings, setHomeownerBookings] = useState<HomeownerBooking[]>([])
-  const [homeownerNotifications, setHomeownerNotifications] = useState<HomeownerNotification[]>([])
-  const [propertyDraft, setPropertyDraft] = useState({
-    customerName: '', addressLine1: '', city: 'Charlotte', state: 'NC', county: 'Mecklenburg', postalCode: '',
-  })
-  const [bookingDraft, setBookingDraft] = useState({
-    propertyId: '', service: 'recurring_cleaning', preferredStart: '', symptomSummary: 'Biweekly home cleaning',
-    safetyStop: false, squareFeet: '2200', bathrooms: '2', frequency: 'biweekly', deepClean: false, pets: false,
-  })
-  const [homeownerMessage, setHomeownerMessage] = useState('')
-  const [providerPricebook, setProviderPricebook] = useState<ProviderPricebookItem[]>([])
-  const [providerWorkOrders, setProviderWorkOrders] = useState<ProviderWorkOrder[]>([])
-  const [providerServiceBookings, setProviderServiceBookings] = useState<ProviderServiceBooking[]>([])
-  const [providerEarnings, setProviderEarnings] = useState({ completedJobs: 0, grossRevenueCents: 0 })
-  const [pricebookDraft, setPricebookDraft] = useState({
-    service: 'hvac_service', label: 'Diagnostic visit', baseFee: '89', laborLow: '90', laborHigh: '290',
-  })
-  const [availabilityDraft, setAvailabilityDraft] = useState({ weekday: '1', startTime: '08:00', endTime: '17:00', urgent: true })
-  const [providerMessage, setProviderMessage] = useState('')
-  const [completionDraft, setCompletionDraft] = useState({
-    issue: '', parts: '', laborMinutes: '60', finalPrice: '189', outcome: 'resolved', aiAssessmentOutcome: 'corrected',
-  })
-  const [adminOperations, setAdminOperations] = useState<AdminOperations>({
-    bookings: [], disputes: [], providerControls: [], auditLogs: [], queues: { safetyReview: 0, unassigned: 0 },
-  })
-  const [integrationStatus, setIntegrationStatus] = useState<Record<string, { configured: boolean; humanActionRequired?: boolean; productionReady?: boolean }>>({})
-  const [providerControlDraft, setProviderControlDraft] = useState({
-    organizationId: 'provider-org', status: 'pending', reason: 'Pending document verification',
-  })
-  const [dispatchProviderId, setDispatchProviderId] = useState('provider-1')
-  const [adminMessage, setAdminMessage] = useState('')
-  const [adminUsers, setAdminUsers] = useState<AdminIdentityUser[]>([])
-  const [userDraft, setUserDraft] = useState({
-    organizationId: '', email: '', displayName: '', role: 'homeowner', accessCode: '',
-  })
-  const [accessCode, setAccessCode] = useState('')
-  const [loginError, setLoginError] = useState('')
-  const [evidence, setEvidence] = useState<Evidence[]>(loadEvidence)
-  const [customerName, setCustomerName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [consentToText, setConsentToText] = useState(false)
-  const [summary, setSummary] = useState('Water under kitchen sink')
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [caseId, setCaseId] = useState('')
-  const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
-  const [analysisState, setAnalysisState] = useState<'idle' | 'working' | 'done' | 'error' | 'quota'>('idle')
-  const [analysisSummary, setAnalysisSummary] = useState<string[]>([])
-  const [technicianName, setTechnicianName] = useState('')
-  const [propertyCustomer, setPropertyCustomer] = useState('')
-  const [propertyAddress, setPropertyAddress] = useState('')
-  const [membershipId, setMembershipId] = useState('')
-  const [membershipState, setMembershipState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [assetLabel, setAssetLabel] = useState('')
-  const [installedYear, setInstalledYear] = useState('')
-  const [passport, setPassport] = useState<null | {
-    continuityScore: number
-    prioritizedActions: { assetId: string; score: number; riskLevel: string; reasons: string[]; action: string; nextDueAt: string }[]
-  }>(null)
-  const [thresholdEvents, setThresholdEvents] = useState<{
-    id: string
-    severity: string
-    reason: string
-    status: string
-    recommendedProtocolId: ProtocolId | null
-    safetyStop: boolean
-  }[]>([])
-  const [protocolId, setProtocolId] = useState<ProtocolId>('sink_leak')
-  const [protocolAnswers, setProtocolAnswers] = useState<Record<string, string | boolean | number>>({})
-  const [protocolEvidenceIds, setProtocolEvidenceIds] = useState<string[]>([])
-  const estimate = useMemo(() => buildEstimate(evidence, summary), [evidence, summary])
-  const price = useMemo(() => calculateTransparentPrice(defaultPricingPolicy, {
-    confidence: estimate.confidence,
-    afterHours: true,
-    safetyEscalation: estimate.safetyEscalation,
-  }), [estimate.confidence, estimate.safetyEscalation])
-  const intakeErrors = useMemo(() => validateCase({ customerName, phone, summary, consentToText, evidence }), [customerName, phone, summary, consentToText, evidence])
-  const hypotheses = useMemo(() => {
-    const signals: DiagnosticSignal[] = []
-    if (evidence[0]?.observed) signals.push('leaks_during_drain')
-    if (evidence[1]?.observed) signals.push('visible_joint_moisture', 'supply_lines_dry')
-    if (evidence[2]?.observed) signals.push('continuous_meter_movement')
-    return rankHypotheses(signals)
-  }, [evidence])
-  const marketplaceEconomics = useMemo(() => annualMembershipEconomics(), [])
-  const cleaningEstimate = useMemo(() => estimateCleaningRange({
-    squareFeet: 2200, bathrooms: 2, frequency: 'biweekly', deepClean: false, pets: true,
-  }), [])
-  const cleaningMatches = useMemo(() => matchHomeCareProviders({
-    service: 'recurring_cleaning', postalCode: '28210', urgent: false, safetyStop: false,
-  }, demoHomeCareTeam, demoProviders), [])
-  const selectedProtocol = useMemo(() => protocolCatalog.find((item) => item.id === protocolId)!, [protocolId])
-  const protocolEvaluation = useMemo(() => evaluateEvidenceProtocol({
-    protocolId,
-    answers: protocolAnswers,
-    observedEvidenceIds: protocolEvidenceIds,
-  }), [protocolId, protocolAnswers, protocolEvidenceIds])
+export default function App() { return <AuthProvider>{(auth) => <RoleRouter auth={auth} render={(role) => <Workspace auth={auth} role={role}/>} />}</AuthProvider>; }
 
-  useEffect(() => {
-    localStorage.setItem('missedlead:evidence', JSON.stringify(evidence))
-  }, [evidence])
-
-  useEffect(() => {
-    fetch('/api/session')
-      .then(async (response) => {
-        if (!response.ok) {
-          setSession('anonymous')
-          return
-        }
-        const result = await response.json() as { session: PortalSession }
-        setPortalSession(result.session)
-        setSession('authenticated')
-      })
-      .catch(() => setSession('anonymous'))
-  }, [])
-
-  useEffect(() => {
-    if (portalSession?.role !== 'homeowner') return
-    Promise.all([
-      fetch('/api/homeowner/properties').then((response) => response.ok ? response.json() : { properties: [] }),
-      fetch('/api/homeowner/bookings').then((response) => response.ok ? response.json() : { bookings: [] }),
-      fetch('/api/homeowner/notifications').then((response) => response.ok ? response.json() : { notifications: [] }),
-    ]).then(([propertiesResult, bookingsResult, notificationsResult]) => {
-      const properties = (propertiesResult as { properties: HomeownerProperty[] }).properties
-      setHomeownerProperties(properties)
-      setHomeownerBookings((bookingsResult as { bookings: HomeownerBooking[] }).bookings)
-      setHomeownerNotifications((notificationsResult as { notifications: HomeownerNotification[] }).notifications)
-      if (properties[0]) setBookingDraft((draft) => ({ ...draft, propertyId: draft.propertyId || properties[0].id }))
-    }).catch(() => setHomeownerMessage('Home data could not be loaded.'))
-  }, [portalSession])
-
-  const refreshAdminOperations = async () => {
-    const [operationsResponse, integrationsResponse, usersResponse] = await Promise.all([
-      fetch('/api/admin/operations'), fetch('/api/admin/integrations'), fetch('/api/admin/users'),
-    ])
-    if (!operationsResponse.ok || !integrationsResponse.ok) {
-      setAdminMessage('Operations data could not be loaded.')
-      return
-    }
-    setAdminOperations(await operationsResponse.json() as AdminOperations)
-    const integrationResult = await integrationsResponse.json() as { integrations: typeof integrationStatus }
-    setIntegrationStatus(integrationResult.integrations)
-    if (usersResponse.ok) setAdminUsers(((await usersResponse.json()) as { users: AdminIdentityUser[] }).users)
-  }
-
-  useEffect(() => {
-    if (portalSession?.role !== 'admin') return
-    queueMicrotask(() => { void refreshAdminOperations() })
-  }, [portalSession])
-
-  useEffect(() => {
-    if (portalSession?.role !== 'provider') return
-    Promise.all([
-      fetch('/api/provider/pricebook').then((response) => response.ok ? response.json() : { items: [] }),
-      fetch('/api/provider/work-orders').then((response) => response.ok ? response.json() : { workOrders: [], serviceBookings: [], earnings: { completedJobs: 0, grossRevenueCents: 0 } }),
-    ]).then(([pricebookResult, workOrderResult]) => {
-      setProviderPricebook((pricebookResult as { items: ProviderPricebookItem[] }).items)
-      const workData = workOrderResult as { workOrders: ProviderWorkOrder[]; serviceBookings: ProviderServiceBooking[]; earnings: typeof providerEarnings }
-      setProviderWorkOrders(workData.workOrders)
-      setProviderServiceBookings(workData.serviceBookings)
-      setProviderEarnings(workData.earnings)
-    }).catch(() => setProviderMessage('Provider workspace could not be loaded.'))
-  }, [portalSession])
-
-  const login = async (event: FormEvent) => {
-    event.preventDefault()
-    setLoginError('')
-    const response = await fetch('/api/session', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: email.trim() || undefined, accessCode }),
-    })
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({ error: 'authentication_failed' })) as { error?: string }
-      setLoginError(result.error === 'email_required'
-        ? 'Email is required when multiple portal accounts are configured.'
-        : 'Email or access code is invalid, or authentication is not configured.')
-      return
-    }
-    const result = await response.json() as { session: PortalSession }
-    setAccessCode('')
-    setPortalSession(result.session)
-    setSession('authenticated')
-  }
-
-  const logout = async () => {
-    await fetch('/api/session', { method: 'DELETE' })
-    setPortalSession(null)
-    setSession('anonymous')
-    setEmail('')
-    setAccessCode('')
-  }
-
-  const toggleEvidence = (label: string) => {
-    setEvidence((items) =>
-      items.map((item) => item.label === label ? { ...item, observed: !item.observed } : item),
-    )
-  }
-
-  const saveCase = async () => {
-    setSaveState('saving')
-    try {
-      const response = await fetch('/api/cases', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          customerName,
-          phone,
-          summary,
-          consentToText,
-          evidence,
-        }),
-      })
-      if (!response.ok) throw new Error(`Case API returned ${response.status}`)
-      const result = await response.json() as { case: { id: string } }
-      setCaseId(result.case.id)
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
-    }
-  }
-
-  const uploadAndAnalyze = async () => {
-    if (!caseId || !evidenceFile) return
-    setAnalysisState('working')
-    const body = new FormData()
-    body.append('evidence', evidenceFile)
-    try {
-      const upload = await fetch(`/api/cases/${caseId}/evidence`, { method: 'POST', body })
-      if (!upload.ok) throw new Error('upload_failed')
-      const analysisBody = new FormData()
-      analysisBody.append('evidence', evidenceFile)
-      const analyzed = await fetch(`/api/cases/${caseId}/evidence/analyze`, { method: 'POST', body: analysisBody })
-      if (analyzed.status === 502) {
-        setAnalysisState('quota')
-        return
-      }
-      if (!analyzed.ok) throw new Error('analysis_failed')
-      const result = await analyzed.json() as { analysis: { observations: string[] } }
-      setAnalysisSummary(result.analysis.observations)
-      setAnalysisState('done')
-    } catch {
-      setAnalysisState('error')
-    }
-  }
-
-  const createMembership = async () => {
-    setMembershipState('saving')
-    const response = await fetch('/api/maintenance/memberships', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        technicianName,
-        technicianPhone: '+15125550199',
-        customerName: propertyCustomer,
-        propertyAddress,
-        terms: defaultMaintenanceTerms,
-        compliance: {
-          jurisdiction: 'NC',
-          legalMode: 'scheduled_maintenance',
-          contractorLicenseVerified: true,
-          serviceContractRegistrationVerified: false,
-        },
-        initialRepairCreditCents: 0,
-      }),
-    })
-    if (!response.ok) {
-      setMembershipState('error')
-      return
-    }
-    const result = await response.json() as { membership: { id: string } }
-    setMembershipId(result.membership.id)
-    setMembershipState('saved')
-  }
-
-  const addHomeAsset = async () => {
-    if (!membershipId) return
-    const created = await fetch(`/api/maintenance/memberships/${membershipId}/assets`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        category: 'hvac',
-        label: assetLabel,
-        installedYear: Number(installedYear),
-        expectedLifeYears: 15,
-        serviceIntervalMonths: 12,
-        lastServicedAt: null,
-        condition: 'good',
-      }),
-    })
-    if (!created.ok) {
-      setMembershipState('error')
-      return
-    }
-    const response = await fetch(`/api/maintenance/memberships/${membershipId}/passport`)
-    const result = await response.json() as { passport: NonNullable<typeof passport> }
-    setPassport(result.passport)
-    const evaluated = await fetch(`/api/maintenance/memberships/${membershipId}/evaluate-thresholds`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    })
-    if (evaluated.ok) {
-      const thresholdResult = await evaluated.json() as { events: typeof thresholdEvents }
-      setThresholdEvents(thresholdResult.events)
-    }
-    setAssetLabel('')
-    setInstalledYear('')
-  }
-
-  const acknowledgeThresholdEvent = async (eventId: string) => {
-    const response = await fetch(`/api/maintenance/events/${eventId}/acknowledge`, { method: 'POST' })
-    if (!response.ok) return
-    setThresholdEvents((events) => events.map((event) => event.id === eventId ? { ...event, status: 'acknowledged' } : event))
-  }
-
-  const createHomeownerProperty = async (event: FormEvent) => {
-    event.preventDefault()
-    setHomeownerMessage('')
-    const response = await fetch('/api/homeowner/properties', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(propertyDraft),
-    })
-    const result = await response.json() as { property?: HomeownerProperty; issues?: string[] }
-    if (!response.ok || !result.property) {
-      setHomeownerMessage(result.issues?.join(' ') ?? 'Property could not be added.')
-      return
-    }
-    setHomeownerProperties((properties) => [result.property!, ...properties])
-    setBookingDraft((draft) => ({ ...draft, propertyId: result.property!.id }))
-    setPropertyDraft((draft) => ({ ...draft, customerName: '', addressLine1: '', postalCode: '' }))
-    setHomeownerMessage('Charlotte property added.')
-  }
-
-  const createHomeownerBooking = async (event: FormEvent) => {
-    event.preventDefault()
-    setHomeownerMessage('')
-    const preferredStart = bookingDraft.preferredStart ? new Date(bookingDraft.preferredStart).toISOString() : ''
-    const response = await fetch('/api/homeowner/bookings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        propertyId: bookingDraft.propertyId,
-        service: bookingDraft.service,
-        preferredStart,
-        symptomSummary: bookingDraft.symptomSummary,
-        safetyStop: bookingDraft.safetyStop,
-        confidence: 0,
-        cleaningScope: bookingDraft.service === 'recurring_cleaning' ? {
-          squareFeet: Number(bookingDraft.squareFeet),
-          bathrooms: Number(bookingDraft.bathrooms),
-          frequency: bookingDraft.frequency,
-          deepClean: bookingDraft.deepClean,
-          pets: bookingDraft.pets,
-        } : undefined,
-      }),
-    })
-    const result = await response.json() as { booking?: HomeownerBooking; error?: string }
-    if (!response.ok || !result.booking) {
-      setHomeownerMessage(result.error === 'booking_slot_conflict'
-        ? 'That home already has an active request at the selected time.'
-        : 'Service request could not be created.')
-      return
-    }
-    setHomeownerBookings((bookings) => [result.booking!, ...bookings])
-    const notifications = await fetch('/api/homeowner/notifications')
-    if (notifications.ok) setHomeownerNotifications(((await notifications.json()) as { notifications: HomeownerNotification[] }).notifications)
-    setHomeownerMessage(result.booking.safetyStop
-      ? 'Safety concern routed to human review. Automated pricing and normal booking are stopped.'
-      : 'Service request submitted with a preliminary price range.')
-  }
-
-  const readHomeownerNotification = async (notificationId: string) => {
-    const response = await fetch(`/api/homeowner/notifications/${notificationId}/read`, { method: 'POST' })
-    if (!response.ok) return
-    setHomeownerNotifications((notifications) => notifications.map((notification) =>
-      notification.id === notificationId ? { ...notification, readAt: new Date().toISOString() } : notification))
-  }
-
-  const createPricebookItem = async (event: FormEvent) => {
-    event.preventDefault()
-    const response = await fetch('/api/provider/pricebook', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        service: pricebookDraft.service, label: pricebookDraft.label,
-        baseFeeCents: Math.round(Number(pricebookDraft.baseFee) * 100),
-        laborLowCents: Math.round(Number(pricebookDraft.laborLow) * 100),
-        laborHighCents: Math.round(Number(pricebookDraft.laborHigh) * 100),
-        active: true,
-      }),
-    })
-    const result = await response.json() as { item?: ProviderPricebookItem; error?: string }
-    if (!response.ok || !result.item) {
-      setProviderMessage(result.error ?? 'Pricebook item could not be saved.')
-      return
-    }
-    setProviderPricebook((items) => [result.item!, ...items])
-    setProviderMessage('Contractor pricebook updated.')
-  }
-
-  const createProviderAvailability = async (event: FormEvent) => {
-    event.preventDefault()
-    const response = await fetch('/api/provider/availability', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        weekday: Number(availabilityDraft.weekday), startTime: availabilityDraft.startTime,
-        endTime: availabilityDraft.endTime, urgent: availabilityDraft.urgent,
-      }),
-    })
-    const result = await response.json() as { error?: string }
-    setProviderMessage(response.ok ? 'Availability published.' : result.error === 'availability_conflict' ? 'That availability window already exists.' : 'Availability could not be saved.')
-  }
-
-  const refreshProviderWorkOrders = async () => {
-    const response = await fetch('/api/provider/work-orders')
-    if (!response.ok) return
-    const result = await response.json() as { workOrders: ProviderWorkOrder[]; serviceBookings: ProviderServiceBooking[]; earnings: typeof providerEarnings }
-    setProviderWorkOrders(result.workOrders)
-    setProviderServiceBookings(result.serviceBookings)
-    setProviderEarnings(result.earnings)
-  }
-
-  const advanceProviderWorkOrder = async (workOrder: ProviderWorkOrder) => {
-    const action = workOrder.status === 'offered' ? 'accept' : workOrder.status === 'accepted' ? 'schedule' : 'complete'
-    const body = action === 'schedule'
-      ? { scheduledAt: nextAvailableDay() }
-      : action === 'complete'
-        ? {
-            finalOutcome: {
-              technicianConfirmedIssue: completionDraft.issue,
-              parts: completionDraft.parts.split(',').map((part) => part.trim()).filter(Boolean),
-              laborMinutes: Number(completionDraft.laborMinutes),
-              finalPriceCents: Math.round(Number(completionDraft.finalPrice) * 100),
-              outcome: completionDraft.outcome,
-              aiAssessmentOutcome: completionDraft.aiAssessmentOutcome,
-            },
-          }
-        : {}
-    if (action === 'complete' && !completionDraft.issue.trim()) {
-      setProviderMessage('Enter the field-confirmed issue before completing work.')
-      return
-    }
-    const response = await fetch(`/api/maintenance/work-orders/${workOrder.id}/${action}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    })
-    const result = await response.json() as { error?: string }
-    setProviderMessage(response.ok ? `Work order ${action} recorded.` : result.error ?? 'Work order could not be updated.')
-    if (response.ok) await refreshProviderWorkOrders()
-  }
-
-  const advanceProviderBooking = async (booking: ProviderServiceBooking) => {
-    const action = booking.status === 'assigned' && !booking.providerAcceptedAt
-      ? 'accept'
-      : booking.status === 'assigned'
-        ? 'schedule'
-        : 'complete'
-    const body = action === 'schedule'
-      ? { scheduledAt: nextAvailableDay() }
-      : action === 'complete'
-        ? {
-            finalOutcome: {
-              technicianConfirmedIssue: completionDraft.issue,
-              parts: completionDraft.parts.split(',').map((part) => part.trim()).filter(Boolean),
-              laborMinutes: Number(completionDraft.laborMinutes),
-              finalPriceCents: Math.round(Number(completionDraft.finalPrice) * 100),
-              outcome: completionDraft.outcome,
-              aiAssessmentOutcome: completionDraft.aiAssessmentOutcome,
-            },
-          }
-        : {}
-    if (action === 'complete' && !completionDraft.issue.trim()) {
-      setProviderMessage('Enter the field-confirmed issue before completing work.')
-      return
-    }
-    const response = await fetch(`/api/provider/service-bookings/${booking.id}/${action}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    })
-    setProviderMessage(response.ok ? `Service booking ${action} recorded.` : 'Service booking could not be updated.')
-    if (response.ok) await refreshProviderWorkOrders()
-  }
-
-  const dispatchAdminBooking = async (bookingId: string, safetyReviewed: boolean) => {
-    const response = await fetch(`/api/admin/bookings/${bookingId}/dispatch`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ providerId: dispatchProviderId, safetyReviewed }),
-    })
-    const result = await response.json() as { error?: string }
-    setAdminMessage(response.ok ? 'Booking assigned and audited.' : result.error === 'safety_review_required' ? 'Complete the human safety review before dispatch.' : 'Dispatch failed.')
-    if (response.ok) await refreshAdminOperations()
-  }
-
-  const saveProviderControl = async (event: FormEvent) => {
-    event.preventDefault()
-    const response = await fetch('/api/admin/provider-controls', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...providerControlDraft, licenseExpiresAt: null, insuranceExpiresAt: null,
-      }),
-    })
-    setAdminMessage(response.ok ? 'Provider status updated and audited.' : 'Provider status could not be updated.')
-    if (response.ok) await refreshAdminOperations()
-  }
-
-  const advanceDispute = async (dispute: AdminDispute) => {
-    const nextStatus = dispute.status === 'open' ? 'investigating' : 'resolved'
-    const response = await fetch(`/api/admin/disputes/${dispute.id}/${nextStatus}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(nextStatus === 'resolved' ? { resolution: 'Operator documented resolution and notified the homeowner.' } : {}),
-    })
-    setAdminMessage(response.ok ? `Dispute moved to ${nextStatus}.` : 'Dispute could not be updated.')
-    if (response.ok) await refreshAdminOperations()
-  }
-
-  const createIdentityUser = async (event: FormEvent) => {
-    event.preventDefault()
-    const response = await fetch('/api/admin/users', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(userDraft),
-    })
-    const result = await response.json() as { error?: string }
-    setAdminMessage(response.ok ? 'Portal user provisioned.' : result.error ?? 'User could not be provisioned.')
-    if (response.ok) {
-      setUserDraft({ organizationId: '', email: '', displayName: '', role: 'homeowner', accessCode: '' })
-      await refreshAdminOperations()
-    }
-  }
-
-  const toggleIdentityUser = async (user: AdminIdentityUser) => {
-    const response = await fetch(`/api/admin/users/${user.id}/active`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ active: !user.active }),
-    })
-    setAdminMessage(response.ok ? `User ${user.active ? 'disabled' : 'enabled'}.` : 'User status could not be changed.')
-    if (response.ok) await refreshAdminOperations()
-  }
-
-  if (session !== 'authenticated') {
-    return (
-      <main className="login-shell">
-        <form className="login-card" onSubmit={login}>
-          <div className="brand"><span>ML</span> MissedLead OS</div>
-          <p className="eyebrow">SECURE OPERATIONS CONSOLE</p>
-          <h1>{session === 'checking' ? 'Checking session…' : 'Access recovery operations'}</h1>
-          {session === 'anonymous' && (
-            <>
-              <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="Required for role-based accounts" /></label>
-              <label>Access code<input type="password" value={accessCode} onChange={(event) => setAccessCode(event.target.value)} autoComplete="current-password" required /></label>
-              <button type="submit">Sign in</button>
-              {loginError && <p className="login-error">{loginError}</p>}
-            </>
-          )}
-        </form>
-      </main>
-    )
-  }
-
-  return (
-    <main className={`portal-${portalSession?.role ?? 'admin'}`}>
-      <header className="topbar">
-        <div className="brand"><span>ML</span> MissedLead OS</div>
-        <nav className="portal-nav" aria-label="Current portal">
-          <span>{portalSession?.displayName ?? 'Authenticated user'}</span>
-          <b>{portalSession?.role ?? 'admin'}</b>
-          <button type="button" onClick={logout}>Sign out</button>
-        </nav>
-        <div className="status"><i /> {portalSession?.role === 'homeowner' ? 'Home care active' : portalSession?.role === 'provider' ? 'Provider workspace live' : 'Operations online'}</div>
-      </header>
-
-      <section className="portal-context" aria-labelledby="portal-title">
-        <div>
-          <p className="eyebrow">{portalSession?.role === 'homeowner' ? 'HOMEOWNER PORTAL' : portalSession?.role === 'provider' ? 'SERVICE PROVIDER PORTAL' : 'PLATFORM OPERATIONS'}</p>
-          <h2 id="portal-title">{portalSession?.role === 'homeowner' ? 'Your home, care team, and service history.' : portalSession?.role === 'provider' ? 'Assigned work, evidence, and verified outcomes.' : 'Safety, dispatch, provider, and customer operations.'}</h2>
-        </div>
-        <dl>
-          <div><dt>Organization</dt><dd>{portalSession?.organizationId}</dd></div>
-          <div><dt>Access role</dt><dd>{portalSession?.role}</dd></div>
-        </dl>
-      </section>
-
-      {portalSession?.role === 'homeowner' && (
-        <section className="role-workspace" aria-labelledby="homeowner-workspace-title">
-          <div className="workspace-heading">
-            <p className="eyebrow">HOMEOWNER ONBOARDING</p>
-            <h2 id="homeowner-workspace-title">Add your Charlotte home and request care.</h2>
-            <p>Only Mecklenburg County 282xx addresses are accepted during the pilot.</p>
-          </div>
-          <div className="workspace-grid">
-            <form className="workspace-card" onSubmit={createHomeownerProperty}>
-              <h3>Property</h3>
-              <label>Home or customer name<input required value={propertyDraft.customerName} onChange={(event) => setPropertyDraft({ ...propertyDraft, customerName: event.target.value })} /></label>
-              <label>Street address<input required value={propertyDraft.addressLine1} onChange={(event) => setPropertyDraft({ ...propertyDraft, addressLine1: event.target.value })} /></label>
-              <div className="field-row">
-                <label>City<input required value={propertyDraft.city} onChange={(event) => setPropertyDraft({ ...propertyDraft, city: event.target.value })} /></label>
-                <label>ZIP<input required inputMode="numeric" pattern="\d{5}" value={propertyDraft.postalCode} onChange={(event) => setPropertyDraft({ ...propertyDraft, postalCode: event.target.value })} /></label>
-              </div>
-              <button type="submit">Add Charlotte property</button>
-            </form>
-            <form className="workspace-card" onSubmit={createHomeownerBooking}>
-              <h3>Service request</h3>
-              <label>Property<select required value={bookingDraft.propertyId} onChange={(event) => setBookingDraft({ ...bookingDraft, propertyId: event.target.value })}>
-                <option value="">Select a property</option>
-                {homeownerProperties.map((property) => <option key={property.id} value={property.id}>{property.addressLine1}</option>)}
-              </select></label>
-              <label>Service<select value={bookingDraft.service} onChange={(event) => setBookingDraft({ ...bookingDraft, service: event.target.value })}>
-                <option value="recurring_cleaning">Recurring cleaning</option>
-                <option value="home_care_visit">Home Care Visit</option>
-                <option value="hvac_service">HVAC service</option>
-                <option value="plumbing_service">Plumbing service</option>
-                <option value="handyman_visit">Handyman visit</option>
-              </select></label>
-              <label>Preferred time<input required type="datetime-local" value={bookingDraft.preferredStart} onChange={(event) => setBookingDraft({ ...bookingDraft, preferredStart: event.target.value })} /></label>
-              <label>What do you need?<textarea required value={bookingDraft.symptomSummary} onChange={(event) => setBookingDraft({ ...bookingDraft, symptomSummary: event.target.value })} /></label>
-              {bookingDraft.service === 'recurring_cleaning' && <div className="field-row">
-                <label>Square feet<input type="number" min="200" value={bookingDraft.squareFeet} onChange={(event) => setBookingDraft({ ...bookingDraft, squareFeet: event.target.value })} /></label>
-                <label>Bathrooms<input type="number" min="0" value={bookingDraft.bathrooms} onChange={(event) => setBookingDraft({ ...bookingDraft, bathrooms: event.target.value })} /></label>
-              </div>}
-              <label className="safety-check"><input type="checkbox" checked={bookingDraft.safetyStop} onChange={(event) => setBookingDraft({ ...bookingDraft, safetyStop: event.target.checked })} /> There is smoke, gas/CO concern, active sparking, sewage, flooding near electricity, or another immediate danger.</label>
-              <button type="submit" disabled={!bookingDraft.propertyId}>Request service</button>
-            </form>
-            <div className="workspace-card booking-list">
-              <h3>Current requests</h3>
-              {homeownerBookings.length === 0 ? <p className="empty-state">No service requests yet.</p> : homeownerBookings.map((booking) => (
-                <article key={booking.id}>
-                  <div><strong>{booking.service.replaceAll('_', ' ')}</strong><b>{booking.status}</b></div>
-                  <time>{new Date(booking.preferredStart).toLocaleString()}</time>
-                  <p>{booking.estimateLowCents === null ? 'Pricing blocked pending human safety review.' : `$${booking.estimateLowCents / 100}–$${booking.estimateHighCents! / 100} preliminary range`}</p>
-                </article>
-              ))}
-            </div>
-
-          </div>
-          <div className="workspace-card notification-center">
-            <h3>Notifications</h3>
-            {homeownerNotifications.length === 0 ? <p className="empty-state">No notifications.</p> : homeownerNotifications.map((notification) => (
-              <article key={notification.id} className={notification.readAt ? 'read' : 'unread'}>
-                <div><strong>{notification.title}</strong><b>{notification.type}</b></div>
-                <p>{notification.message}</p>
-                {!notification.readAt && <button onClick={() => readHomeownerNotification(notification.id)}>Mark read</button>}
-              </article>
-            ))}
-          </div>
-          {homeownerMessage && <p className="workspace-message" role="status">{homeownerMessage}</p>}
-        </section>
-      )}
-
-      {portalSession?.role === 'provider' && (
-        <section className="role-workspace" aria-labelledby="provider-workspace-title">
-          <div className="workspace-heading">
-            <p className="eyebrow">PROVIDER BUSINESS OS</p>
-            <h2 id="provider-workspace-title">Price work clearly. Control availability. Close the feedback loop.</h2>
-            <p>Only completed repair revenue generates a platform fee; unbooked leads remain free.</p>
-          </div>
-          <div className="workspace-metrics">
-            <div><span>Completed jobs</span><strong>{providerEarnings.completedJobs}</strong></div>
-            <div><span>Recorded gross revenue</span><strong>${providerEarnings.grossRevenueCents / 100}</strong></div>
-            <div><span>Open work</span><strong>{providerWorkOrders.filter((workOrder) => !['completed', 'cancelled'].includes(workOrder.status)).length + providerServiceBookings.filter((booking) => !['completed', 'cancelled'].includes(booking.status)).length}</strong></div>
-          </div>
-          <div className="workspace-grid">
-            <form className="workspace-card" onSubmit={createPricebookItem}>
-              <h3>Contractor pricebook</h3>
-              <label>Service<select value={pricebookDraft.service} onChange={(event) => setPricebookDraft({ ...pricebookDraft, service: event.target.value })}>
-                <option value="hvac_service">HVAC</option><option value="plumbing_service">Plumbing</option>
-                <option value="recurring_cleaning">Cleaning</option><option value="handyman_visit">Handyman</option>
-              </select></label>
-              <label>Line item<input required value={pricebookDraft.label} onChange={(event) => setPricebookDraft({ ...pricebookDraft, label: event.target.value })} /></label>
-              <div className="field-row">
-                <label>Dispatch $<input type="number" min="0" value={pricebookDraft.baseFee} onChange={(event) => setPricebookDraft({ ...pricebookDraft, baseFee: event.target.value })} /></label>
-                <label>Labor range $<span className="inline-inputs"><input type="number" min="0" value={pricebookDraft.laborLow} onChange={(event) => setPricebookDraft({ ...pricebookDraft, laborLow: event.target.value })} /><input type="number" min="0" value={pricebookDraft.laborHigh} onChange={(event) => setPricebookDraft({ ...pricebookDraft, laborHigh: event.target.value })} /></span></label>
-              </div>
-              <button type="submit">Save pricebook item</button>
-              <div className="compact-list">{providerPricebook.map((item) => <p key={item.id}><span>{item.label}</span><b>${item.baseFeeCents / 100} + ${item.laborLowCents / 100}–${item.laborHighCents / 100}</b></p>)}</div>
-            </form>
-            <form className="workspace-card" onSubmit={createProviderAvailability}>
-              <h3>Availability</h3>
-              <label>Weekday<select value={availabilityDraft.weekday} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, weekday: event.target.value })}>
-                {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}
-              </select></label>
-              <div className="field-row"><label>Start<input type="time" value={availabilityDraft.startTime} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, startTime: event.target.value })} /></label><label>End<input type="time" value={availabilityDraft.endTime} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, endTime: event.target.value })} /></label></div>
-              <label className="safety-check"><input type="checkbox" checked={availabilityDraft.urgent} onChange={(event) => setAvailabilityDraft({ ...availabilityDraft, urgent: event.target.checked })} /> Available for urgent dispatch coordination</label>
-              <button type="submit">Publish availability</button>
-            </form>
-            <div className="workspace-card booking-list">
-              <h3>Assigned work</h3>
-              {(providerWorkOrders.some((workOrder) => workOrder.status === 'scheduled') || providerServiceBookings.some((booking) => booking.status === 'scheduled')) && <div className="completion-fields">
-                <label>Field-confirmed issue<input value={completionDraft.issue} onChange={(event) => setCompletionDraft({ ...completionDraft, issue: event.target.value })} /></label>
-                <label>Parts, comma separated<input value={completionDraft.parts} onChange={(event) => setCompletionDraft({ ...completionDraft, parts: event.target.value })} /></label>
-                <div className="field-row"><label>Labor minutes<input type="number" value={completionDraft.laborMinutes} onChange={(event) => setCompletionDraft({ ...completionDraft, laborMinutes: event.target.value })} /></label><label>Final price $<input type="number" value={completionDraft.finalPrice} onChange={(event) => setCompletionDraft({ ...completionDraft, finalPrice: event.target.value })} /></label></div>
-              </div>}
-              {providerWorkOrders.length === 0 && providerServiceBookings.length === 0 ? <p className="empty-state">No assigned work orders.</p> : providerWorkOrders.map((workOrder) => <article key={workOrder.id}><div><strong>{workOrder.customerName ?? workOrder.summary}</strong><b>{workOrder.status}</b></div><p>{workOrder.propertyAddress ?? workOrder.summary}</p><p>{workOrder.service.replaceAll('_', ' ')}</p>{['offered','accepted','scheduled'].includes(workOrder.status) && <button onClick={() => advanceProviderWorkOrder(workOrder)}>{workOrder.status === 'offered' ? 'Accept work' : workOrder.status === 'accepted' ? 'Schedule next available day' : 'Complete with field outcome'}</button>}</article>)}
-              {providerServiceBookings.map((booking) => <article key={booking.id}><div><strong>{booking.symptomSummary}</strong><b>{booking.status}</b></div><p>{booking.service.replaceAll('_', ' ')}</p>{['assigned','scheduled'].includes(booking.status) && <button onClick={() => advanceProviderBooking(booking)}>{booking.status === 'assigned' && !booking.providerAcceptedAt ? 'Accept work' : booking.status === 'assigned' ? 'Schedule next available day' : 'Complete with field outcome'}</button>}</article>)}
-            </div>
-          </div>
-          {providerMessage && <p className="workspace-message" role="status">{providerMessage}</p>}
-        </section>
-      )}
-
-      {portalSession?.role === 'admin' && (
-        <section className="role-workspace" aria-labelledby="admin-workspace-title">
-          <div className="workspace-heading">
-            <p className="eyebrow">ADMIN CONTROL CENTER</p>
-            <h2 id="admin-workspace-title">Review safety. Dispatch deliberately. Keep an audit trail.</h2>
-            <p>Danger signals remain outside automated pricing and normal booking until a human records review.</p>
-          </div>
-          <div className="workspace-metrics">
-            <div><span>Safety review queue</span><strong>{adminOperations.queues.safetyReview}</strong></div>
-            <div><span>Unassigned requests</span><strong>{adminOperations.queues.unassigned}</strong></div>
-            <div><span>Open disputes</span><strong>{adminOperations.disputes.filter((dispute) => dispute.status !== 'resolved').length}</strong></div>
-          </div>
-          <div className="workspace-grid">
-            <div className="workspace-card booking-list">
-              <h3>Dispatch queue</h3>
-              <label>Provider ID<input value={dispatchProviderId} onChange={(event) => setDispatchProviderId(event.target.value)} /></label>
-              {adminOperations.bookings.filter((booking) => ['requested', 'human_review'].includes(booking.status)).map((booking) => (
-                <article key={booking.id}>
-                  <div><strong>{booking.symptomSummary}</strong><b>{booking.status}</b></div>
-                  <p>{booking.service.replaceAll('_', ' ')} · {booking.organizationId}</p>
-                  <button onClick={() => dispatchAdminBooking(booking.id, booking.status === 'human_review')}>{booking.status === 'human_review' ? 'Record safety review & assign' : 'Assign provider'}</button>
-                </article>
-              ))}
-              {adminOperations.bookings.length === 0 && <p className="empty-state">No booking activity.</p>}
-            </div>
-            <form className="workspace-card" onSubmit={saveProviderControl}>
-              <h3>Provider control</h3>
-              <label>Provider organization<input value={providerControlDraft.organizationId} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, organizationId: event.target.value })} /></label>
-              <label>Status<select value={providerControlDraft.status} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, status: event.target.value })}><option value="pending">Pending</option><option value="approved">Approved</option><option value="suspended">Suspended</option></select></label>
-              <label>Reason<textarea value={providerControlDraft.reason} onChange={(event) => setProviderControlDraft({ ...providerControlDraft, reason: event.target.value })} /></label>
-              <button type="submit">Update provider status</button>
-              <div className="compact-list">{adminOperations.providerControls.map((control) => <p key={control.organizationId}><span>{control.organizationId}</span><b>{control.status}</b></p>)}</div>
-            </form>
-            <div className="workspace-card booking-list">
-              <h3>Disputes and refunds</h3>
-              {adminOperations.disputes.length === 0 ? <p className="empty-state">No disputes filed.</p> : adminOperations.disputes.map((dispute) => (
-                <article key={dispute.id}><div><strong>{dispute.summary}</strong><b>{dispute.status}</b></div><p>{dispute.category} · {dispute.organizationId}</p>{dispute.status !== 'resolved' && <button onClick={() => advanceDispute(dispute)}>{dispute.status === 'open' ? 'Start investigation' : 'Record resolution'}</button>}</article>
-              ))}
-            </div>
-            <form className="workspace-card" onSubmit={createIdentityUser}>
-              <h3>Portal users</h3>
-              <label>Organization ID<input required value={userDraft.organizationId} onChange={(event) => setUserDraft({ ...userDraft, organizationId: event.target.value })} /></label>
-              <label>Email<input required type="email" value={userDraft.email} onChange={(event) => setUserDraft({ ...userDraft, email: event.target.value })} /></label>
-              <label>Display name<input required value={userDraft.displayName} onChange={(event) => setUserDraft({ ...userDraft, displayName: event.target.value })} /></label>
-              <label>Role<select value={userDraft.role} onChange={(event) => setUserDraft({ ...userDraft, role: event.target.value })}><option value="homeowner">Homeowner</option><option value="provider">Provider</option><option value="admin">Admin</option></select></label>
-              <label>Temporary access code<input required type="password" minLength={8} value={userDraft.accessCode} onChange={(event) => setUserDraft({ ...userDraft, accessCode: event.target.value })} /></label>
-              <button type="submit">Provision user</button>
-              <div className="compact-list">{adminUsers.map((user) => <p key={user.id}><span>{user.email} · {user.role}</span><button type="button" onClick={() => toggleIdentityUser(user)}>{user.active ? 'Disable' : 'Enable'}</button></p>)}</div>
-            </form>
-          </div>
-          <div className="integration-grid">
-            {Object.entries(integrationStatus).map(([name, status]) => <article key={name}><span>{name}</span><b className={status.configured ? 'ready' : 'blocked'}>{status.configured ? 'configured' : 'human action required'}</b></article>)}
-          </div>
-          <div className="workspace-card audit-list">
-            <h3>Recent audit log</h3>
-            {adminOperations.auditLogs.slice(0, 8).map((entry) => <p key={entry.id}><time>{new Date(entry.createdAt).toLocaleString()}</time><span>{entry.action}</span><code>{entry.targetType}:{entry.targetId}</code></p>)}
-          </div>
-          {adminMessage && <p className="workspace-message" role="status">{adminMessage}</p>}
-        </section>
-      )}
-
-      <section className="hero-panel consumer-operations">
-        <div>
-          <p className="eyebrow">PLUMBING · INBOUND CASE #ML-2048</p>
-          <h1>One missed call.<br />A recoverable job.</h1>
-          <p className="lede">The customer was contacted in 42 seconds. Evidence is collected before a technician is dispatched, and every estimate shows what is known and unknown.</p>
-        </div>
-        <div className="metric"><strong>42s</strong><span>time to recovery</span></div>
-      </section>
-
-      <section className="grid consumer-operations">
-        <article className="card timeline">
-          <div className="card-title"><span>Recovery timeline</span><b>LIVE</b></div>
-          <ol>
-            <li className="done"><time>10:42:06</time><div><strong>Missed call detected</strong><p>After-hours call · Charlotte, NC</p></div></li>
-            <li className="done"><time>10:42:48</time><div><strong>AI text-back delivered</strong><p>Customer replied: “Water under kitchen sink.”</p></div></li>
-            <li className="active"><time>10:44:11</time><div><strong>Guided evidence intake</strong><p>2 of 4 requested checks received</p></div></li>
-            <li><time>Pending</time><div><strong>Book & dispatch</strong><p>Waiting for estimate acknowledgement</p></div></li>
-          </ol>
-        </article>
-
-        <article className="card evidence">
-          <div className="card-title"><span>Diagnostic evidence</span><b>{estimate.confidence}% confidence</b></div>
-          <div className="intake-fields">
-            <label>Customer name<input value={customerName} onChange={(event) => setCustomerName(event.target.value)} required /></label>
-            <label>Phone<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+15125550142" required /></label>
-          </div>
-          <label className="summary-field">
-            Customer-reported symptom
-            <input value={summary} onChange={(event) => setSummary(event.target.value)} />
-          </label>
-          <p className="hint">Toggle evidence to see how the estimate changes.</p>
-          {evidence.map((item) => (
-            <button key={item.label} className={item.observed ? 'observed' : ''} onClick={() => toggleEvidence(item.label)}>
-              <span>{item.observed ? '✓' : '+'}</span>{item.label}<small>{item.observed ? 'verified' : 'request'}</small>
-            </button>
-          ))}
-          <label className="consent-field">
-            <input type="checkbox" checked={consentToText} onChange={(event) => setConsentToText(event.target.checked)} />
-            Customer agreed to receive transactional service texts.
-          </label>
-          <div className="protocol-engine">
-            <div className="card-title"><span>Adaptive evidence protocol</span><b>{Math.round(selectedProtocol.confidenceCeiling * 100)}% MAX</b></div>
-            <select value={protocolId} onChange={(event) => {
-              setProtocolId(event.target.value as ProtocolId)
-              setProtocolAnswers({})
-              setProtocolEvidenceIds([])
-            }}>
-              {protocolCatalog.map((protocol) => <option key={protocol.id} value={protocol.id}>{protocol.title}</option>)}
-            </select>
-            <div className="protocol-questions">
-              {selectedProtocol.questions.map((question) => (
-                <label key={question.id}>{question.prompt}
-                  {question.kind === 'boolean' ? (
-                    <select value={String(protocolAnswers[question.id] ?? '')} onChange={(event) => setProtocolAnswers((answers) => ({
-                      ...answers,
-                      [question.id]: event.target.value === '' ? '' : event.target.value === 'true',
-                    }))}>
-                      <option value="">Select</option><option value="false">No</option><option value="true">Yes</option>
-                    </select>
-                  ) : (
-                    <input value={String(protocolAnswers[question.id] ?? '')} onChange={(event) => setProtocolAnswers((answers) => ({ ...answers, [question.id]: event.target.value }))} />
-                  )}
-                </label>
-              ))}
-            </div>
-            <strong className="capture-title">Safe capture checklist</strong>
-            {selectedProtocol.evidence.map((item) => (
-              <button key={item.id} className={protocolEvidenceIds.includes(item.id) ? 'observed' : ''} onClick={() => setProtocolEvidenceIds((ids) => ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id])}>
-                <span>{protocolEvidenceIds.includes(item.id) ? '✓' : '+'}</span>{item.label}<small>{item.capture}</small>
-              </button>
-            ))}
-            {protocolEvaluation.safetyStop ? (
-              <div className="safety-alert"><strong>Stop normal assessment</strong><span>{protocolEvaluation.safetyInstruction}</span></div>
-            ) : (
-              <div className="protocol-result">
-                <strong>Pre-visit differential</strong>
-                {protocolEvaluation.hypotheses.length > 0 ? protocolEvaluation.hypotheses.map((item) => (
-                  <p key={item.id}>{item.label} <b>{Math.round(item.confidence * 100)}%</b></p>
-                )) : <p>Collect the requested evidence before ranking possible causes.</p>}
-                <small>Field checks: {protocolEvaluation.requiredFieldChecks.join(' · ') || 'Pending evidence'}</small>
-                <small>Estimate variables: {protocolEvaluation.estimateVariables.join(' · ') || 'Pending evidence'}</small>
-              </div>
-            )}
-          </div>
-        </article>
-
-        <article className="card estimate">
-          <div className="card-title"><span>Transparent estimate</span><b>NOT A FINAL QUOTE</b></div>
-          {estimate.safetyEscalation ? (
-            <div className="safety-alert">
-              <strong>Safety escalation required</strong>
-              <span>Estimate and autonomous booking are blocked. Show approved safety guidance and connect a human operator.</span>
-            </div>
-          ) : (
-            <div className="price">${price.low}–${price.high}</div>
-          )}
-          <p>Expected on-site range based on verified evidence and the contractor’s approved pricing policy.</p>
-          <dl>
-            {price.components.map((component) => (
-              <div key={component.label}>
-                <dt>{component.label}<small>{component.basis}</small></dt>
-                <dd>${component.low === component.high ? component.low : `${component.low}–$${component.high}`}</dd>
-              </div>
-            ))}
-          </dl>
-          <details className="assumptions">
-            <summary>Estimate assumptions</summary>
-            <ul>{price.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
-          </details>
-          <div className="unknown"><strong>What could change this price</strong><span>{estimate.missingEvidence.join(' · ') || 'No material evidence missing'}</span></div>
-          <div className="hypotheses">
-            <strong>Evidence-backed possibilities</strong>
-            {hypotheses.length === 0 ? (
-              <p>Not enough evidence to rank a possible cause.</p>
-            ) : hypotheses.slice(0, 2).map((hypothesis) => (
-              <div key={hypothesis.id}>
-                <span>{hypothesis.label}</span>
-                <b>{hypothesis.confidence}%</b>
-                <small>{hypothesis.inspectionRequired}</small>
-                <a href={hypothesis.source.url} target="_blank" rel="noreferrer">{hypothesis.source.title}</a>
-              </div>
-            ))}
-          </div>
-          <button className="booking" disabled={!estimate.canBook || saveState === 'saving' || intakeErrors.length > 0} onClick={saveCase}>
-            {saveState === 'saving' ? 'Saving case…' : estimate.canBook ? 'Send for human approval' : 'More evidence required'}
-          </button>
-          {saveState === 'saved' && <p className="save-result">Case saved · {caseId}</p>}
-          {saveState === 'error' && <p className="save-result error">Case could not be saved. Check API health.</p>}
-          {saveState === 'saved' && (
-            <div className="upload-panel">
-              <label>Photo or video evidence<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)} /></label>
-              <button disabled={!evidenceFile || analysisState === 'working'} onClick={uploadAndAnalyze}>
-                {analysisState === 'working' ? 'Uploading and analyzing…' : 'Upload & analyze evidence'}
-              </button>
-              {analysisState === 'done' && <ul>{analysisSummary.map((item) => <li key={item}>{item}</li>)}</ul>}
-              {analysisState === 'quota' && <p className="save-result error">Evidence was stored, but AI analysis is unavailable because provider credits are exhausted.</p>}
-              {analysisState === 'error' && <p className="save-result error">Evidence processing failed without changing the case estimate.</p>}
-            </div>
-          )}
-        </article>
-      </section>
-
-      <section className="membership-section consumer-operations">
-        <div className="membership-heading">
-          <p className="eyebrow">CHARLOTTE HOME CARE MEMBERSHIP</p>
-          <h2>One home. One accountable care team.</h2>
-          <p>Scheduled care visits, recurring cleaning coordination, and licensed HVAC or plumbing routing—without a repair-coverage promise.</p>
-        </div>
-        <div className="membership-grid">
-          <article className="card">
-            <div className="card-title"><span>Recurring cleaning</span><b>BIWEEKLY</b></div>
-            <div className="price">${cleaningEstimate.lowCents / 100}–${cleaningEstimate.highCents / 100}</div>
-            <p>Preliminary range based on {cleaningEstimate.variables.join(', ')}. Final scope is confirmed before booking.</p>
-          </article>
-          <article className="card">
-            <div className="card-title"><span>Your Home Care Team</span><b>ASSIGNED FIRST</b></div>
-            <dl>
-              {cleaningMatches.map((match) => (
-                <div key={match.provider.id}><dt>{match.relationship}</dt><dd>{match.provider.name}</dd></div>
-              ))}
-            </dl>
-            <p>Assigned providers are offered the visit first; verified backups preserve continuity.</p>
-          </article>
-        </div>
-        <div className="membership-grid">
-          <article className="card membership-form">
-            <div className="card-title"><span>Assign property</span><b>MONTHLY</b></div>
-            <label>Assigned technician<input value={technicianName} onChange={(event) => setTechnicianName(event.target.value)} /></label>
-            <label>Customer / property name<input value={propertyCustomer} onChange={(event) => setPropertyCustomer(event.target.value)} /></label>
-            <label>Property address<input value={propertyAddress} onChange={(event) => setPropertyAddress(event.target.value)} /></label>
-            <button disabled={!technicianName.trim() || !propertyCustomer.trim() || propertyAddress.trim().length < 5 || membershipState === 'saving'} onClick={createMembership}>
-              {membershipState === 'saving' ? 'Assigning…' : 'Create maintenance membership'}
-            </button>
-            {membershipState === 'saved' && <p className="save-result">Membership active · {membershipId}</p>}
-            {membershipState === 'error' && <p className="save-result error">Membership could not be created.</p>}
-            {membershipState === 'saved' && (
-              <div className="asset-form">
-                <strong>Add equipment to Home Passport</strong>
-                <input placeholder="Main HVAC" value={assetLabel} onChange={(event) => setAssetLabel(event.target.value)} />
-                <input type="number" placeholder="Installed year" value={installedYear} onChange={(event) => setInstalledYear(event.target.value)} />
-                <button disabled={!assetLabel.trim() || !installedYear} onClick={addHomeAsset}>Add equipment</button>
-              </div>
-            )}
-          </article>
-          <article className="card plan-card">
-            <div className="card-title"><span>Plan benefits</span><b>${defaultMaintenanceTerms.monthlyFeeCents / 100}/MO</b></div>
-            <dl>
-              <div><dt>Included maintenance visits</dt><dd>{defaultMaintenanceTerms.includedVisitsPerYear}/year</dd></div>
-              <div><dt>Plan classification</dt><dd>Maintenance only</dd></div>
-              <div><dt>Repair coverage</dt><dd>Not included</dd></div>
-              <div><dt>Charlotte launch mode</dt><dd>NC license verified</dd></div>
-            </dl>
-          </article>
-          <article className="card savings-card">
-            <div className="card-title"><span>Charlotte pilot boundary</span><b>MECKLENBURG</b></div>
-            <div className="price">{charlottePilotJurisdiction.allowedPostalCodePrefixes[0]}xx</div>
-            <dl>
-              <div><dt>Launch state</dt><dd>North Carolina</dd></div>
-              <div><dt>Cross-border service</dt><dd>South Carolina blocked</dd></div>
-              <div><dt>Licensed trades</dt><dd>HVAC + plumbing verified</dd></div>
-            </dl>
-            <p>{charlottePilotJurisdiction.disclosures[0]}</p>
-          </article>
-        </div>
-        <div className="passport-panel">
-          <div>
-            <p className="eyebrow">LIVING HOME PASSPORT</p>
-            <h3>Maintenance memory that stays with the home.</h3>
-            <p>Equipment age, evidence, service history, due dates, and technician observations produce an explainable priority list—not a failure prediction.</p>
-          </div>
-          <div className="continuity">
-            <span>Assigned-tech continuity</span>
-            <strong>{passport?.continuityScore ?? 100}%</strong>
-          </div>
-          <div className="risk-list">
-            {passport?.prioritizedActions.length ? passport.prioritizedActions.map((action) => (
-              <article key={action.assetId}>
-                <div><b>{action.riskLevel.toUpperCase()}</b><strong>{action.score}/100</strong></div>
-                <p>{action.action}</p>
-                <small>{action.reasons.join(' ')}</small>
-              </article>
-            )) : <p>Add the first equipment record to generate the explainable maintenance calendar.</p>}
-          </div>
-        </div>
-        <div className="membership-grid">
-          {thresholdEvents.length === 0 ? (
-            <article className="card">
-              <div className="card-title"><span>Preventive events</span><b>CLEAR</b></div>
-              <p>No threshold crossings are open. New equipment evidence is evaluated without predicting a confirmed failure.</p>
-            </article>
-          ) : thresholdEvents.map((event) => (
-            <article className="card" key={event.id}>
-              <div className="card-title"><span>{event.reason}</span><b>{event.severity.toUpperCase()}</b></div>
-              <p>Status: {event.status} · Capture protocol: {event.recommendedProtocolId ?? 'technician review'}</p>
-              {event.safetyStop && <p>Automated pricing and normal booking are blocked until this safety event is resolved.</p>}
-              {event.status === 'open' && <button onClick={() => acknowledgeThresholdEvent(event.id)}>Acknowledge event</button>}
-            </article>
-          ))}
-        </div>
-        <div className="pro-value">
-          <div>
-            <p className="eyebrow">FAIR PRO MARKETPLACE</p>
-            <h3>No fee for a lead that never becomes work.</h3>
-            <p>{marketplaceEconomics.proPromise}</p>
-          </div>
-          <dl>
-            <div><dt>Lead fee</dt><dd>$0</dd></div>
-            <div><dt>Two included-visit payouts</dt><dd>${marketplaceEconomics.technicianVisitPayoutCents / 100}/year</dd></div>
-            <div><dt>Completed $1,000 repair fee</dt><dd>${completedRepairFee(100000) / 100}</dd></div>
-            <div><dt>Fee cap per repair</dt><dd>$150</dd></div>
-          </dl>
-        </div>
-      </section>
-
-      <footer><span>Evidence before estimates.</span><span>Human approval before promises.</span><span>Revenue proven after completion.</span></footer>
-    </main>
-  )
+function Workspace({ auth, role }: { auth: AuthValue; role: Role }) {
+  const { actor, accessToken, signOut } = auth;
+  const [dashboard, setDashboard] = useState<Dashboard>(EMPTY);
+  const [selectedId, setSelectedId] = useState("");
+  const [notice, setNotice] = useState("WeCover is currently serving the Charlotte pilot area.");
+  const [busy, setBusy] = useState(false);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [intakeLocale, setIntakeLocale] = useState<"en" | "es">("en");
+  const [creatingNewRequest, setCreatingNewRequest] = useState(false);
+  const call = useCallback(<T,>(path: string, method = "GET", body?: unknown, key?: string) => accessToken ? api<T>(accessToken, path, method, body, key) : Promise.reject(new Error("로그인이 필요합니다.")), [accessToken]);
+  const refresh = useCallback(async () => { try { const next = await call<Dashboard>("/api/dashboard"); setDashboard(next); setSelectedId((value) => value || next.requests.at(-1)?.id || ""); } catch (error) { setNotice(error instanceof Error ? error.message : "API 연결을 확인해 주세요."); } }, [call]);
+  useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => clearTimeout(timer); }, [refresh]);
+  useEffect(() => { const controller = new AbortController(); void fetch("/api/capabilities", { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject()).then((value: { payments?: { enabled?: boolean } }) => setPaymentsEnabled(value.payments?.enabled === true)).catch(() => setPaymentsEnabled(false)); return () => controller.abort(); }, []);
+  const selected = dashboard.requests.find((item) => item.id === selectedId) ?? dashboard.requests.at(-1);
+  const related = <T extends { requestId: string }>(items: T[]) => items.filter((item) => item.requestId === selected?.id);
+  const job = dashboard.jobs.find((item) => item.requestId === selected?.id);
+  const progress = useMemo(() => ["intake", "matched", "quoted", "funded", "in_progress", "completed", "settled"].indexOf(selected?.status ?? "intake"), [selected]);
+  const act: Action = async (work, success) => { setBusy(true); try { await work(); setNotice(success); await refresh(); } catch (error) { setNotice(error instanceof Error ? error.message : "요청을 처리하지 못했습니다."); } finally { setBusy(false); } };
+  const isNewCustomer = role === "customer" && (!selected || creatingNewRequest);
+  return <div className={`app-shell${isNewCustomer ? " app-shell--intake" : ""}`} data-testid={`${role}-workspace`}><header className="topbar"><a className="brand" href={`/${role}`}><span>W</span> WeCover</a><div className="session"><span data-testid="derived-role">{actor?.email ?? actor?.id}</span>{role === "customer" && selected && <button onClick={() => setCreatingNewRequest((value) => !value)}>{creatingNewRequest ? intakeLocale === "es" ? "Ver solicitudes" : "View requests" : intakeLocale === "es" ? "Nueva solicitud" : "New request"}</button>}<button onClick={() => void signOut()}>{role === "customer" && intakeLocale === "es" ? "Cerrar sesión" : "Sign out"}</button></div></header><main id="top" className={isNewCustomer ? "intake-main" : undefined}>
+    {isNewCustomer && accessToken && <ChatIntake accessToken={accessToken} onLocaleChange={setIntakeLocale} onCreated={async (requestId) => { setNotice(intakeLocale === "es" ? "Solicitud confirmada. Estamos buscando técnicos disponibles." : "Request confirmed. We’re looking for available technicians."); await refresh(); setSelectedId(requestId); setCreatingNewRequest(false); }}/>}
+    {!isNewCustomer && <>
+    {role !== "customer" && <section className="hero"><div><p className="eyebrow">CHARLOTTE PILOT ONLY</p><h1>집 수리의 불안을<br/><em>신뢰로 덮습니다.</em></h1><p>현재 서비스 가능 지역은 Charlotte 파일럿 구역입니다. 가스·화재·붕괴·노출 전선 신고는 접수 단계에서 차단됩니다.</p></div><div className="trust-card" data-testid="pilot-safety-gate"><strong>현재 제공되는 보호</strong><span>위험 신고 자동 차단</span><span>공급자 범위·총액 견적 비교</span><span>20% 보증금 · 72시간 분쟁 보호</span></div></section>}
+    <div className="notice" role="status">{notice}</div>
+    {dashboard.requests.length > 0 && <label className="request-picker">{role === "customer" ? intakeLocale === "es" ? "Solicitud" : "Repair request" : "작업 선택"}<select value={selected?.id ?? ""} onChange={(event) => setSelectedId(event.target.value)}>{dashboard.requests.map((item) => <option key={item.id} value={item.id}>{item.description} · {role === "customer" ? customerStatusLabel[intakeLocale][item.status] ?? item.status : statusLabel[item.status] ?? item.status}</option>)}</select></label>}
+    {selected && <ol className="stepper" aria-label={role === "customer" ? intakeLocale === "es" ? "Progreso de la solicitud" : "Repair progress" : "작업 진행 단계"}>{(role === "customer" ? intakeLocale === "es" ? ["Solicitud", "Búsqueda", "Presupuestos", "Depósito", "Trabajo", "Protección", "Final"] : ["Request", "Matching", "Quotes", "Deposit", "Work", "Protection", "Complete"] : ["안전 접수", "매칭", "견적", "보증금", "작업", "보호 기간", "정산"]).map((label, index) => <li key={label} className={index <= progress ? "done" : ""}><span>{index + 1}</span>{label}</li>)}</ol>}
+    {role === "customer" && <CustomerView selected={selected} quotes={related(dashboard.quotes)} changes={related(dashboard.changes)} job={job} disputes={related(dashboard.disputes)} busy={busy} paymentsEnabled={paymentsEnabled} locale={intakeLocale} act={act} call={call}/>}
+    {role === "provider" && <ProviderView selected={selected} evidence={related(dashboard.evidence)} busy={busy} act={act} call={call}/>}
+    {role === "operator" && <OperatorView dashboard={dashboard} selected={selected} disputes={related(dashboard.disputes)} busy={busy} act={act} call={call}/>}
+    </>}
+  </main>{!isNewCustomer && <footer>{role === "customer" ? intakeLocale === "es" ? "© 2026 WeCover Charlotte · Los pagos y cambios aprobados quedan registrados." : "© 2026 WeCover Charlotte · Payments and approved changes are recorded." : "© 2026 WeCover Charlotte · 결제와 변경 승인은 감사 기록에 남습니다."}</footer>}</div>;
 }
 
-export default App
+function CustomerView({ selected, quotes, changes, job, disputes, busy, paymentsEnabled, locale, act, call }: { selected?: ServiceRequest; quotes: Quote[]; changes: Change[]; job?: Job; disputes: Dispute[]; busy: boolean; paymentsEnabled: boolean; locale: "en" | "es"; act: Action; call: Caller }) {
+  const [payment, setPayment] = useState<{ kind: "deposit" | "balance"; quote?: Quote } | null>(null);
+  const [mediaState, setMediaState] = useState<string[]>([]);
+  const [sentMessages,setSentMessages]=useState<string[]>([]);
+  if (!selected) return null;
+  const selectedQuote = quotes.find((quote) => quote.id === job?.quoteId);
+  const hasChatScope = Boolean(selected.workScopeSnapshot);
+  const es = hasChatScope && locale === "es", en = hasChatScope && locale === "en";
+  return <div className="dashboard-grid"><section className="panel span-two"><div className="section-title"><p>{hasChatScope ? locale === "es" ? "SU SOLICITUD" : "YOUR REQUEST" : "내 작업"}</p><h2>{selected.description}</h2></div><div className="meta"><span className={`pill ${selected.safetyStatus}`}>{hasChatScope ? selected.safetyStatus === "cleared" ? locale === "es" ? "Seguridad revisada" : "Safety reviewed" : locale === "es" ? "Bloqueado por seguridad" : "Safety blocked" : selected.safetyStatus === "cleared" ? "안전 확인" : "위험 차단"}</span><span>{selected.address}</span><span>{hasChatScope ? customerStatusLabel[locale][selected.status] ?? selected.status : statusLabel[selected.status]}</span></div>{selected.safetyStatus === "blocked" && <p className="danger-note" data-testid="blocked-request">{selected.hazardReason} · {es ? "Llame a los servicios de emergencia. La búsqueda y el pago están bloqueados." : en ? "Call emergency services. Matching and payment are blocked." : "긴급기관에 연락하세요. 매칭과 결제가 차단됩니다."}</p>}{selected.expandedSearch && <p className="warning">{es ? "Estamos ampliando la búsqueda para encontrar más técnicos." : en ? "We’re expanding the search to find more technicians." : "배정된 공급자가 3명 미만입니다."}</p>}</section>
+    {hasChatScope && <ChatScopeSummary scope={selected.workScopeSnapshot!} locale={locale}/>}
+    {hasChatScope && <AttachmentGallery requestId={selected.id} call={call} locale={locale}/>}
+    {!hasChatScope && <>
+    <section className="panel" data-testid="request-details"><div className="section-title"><p>구조화 범위 · TRIAGE</p><h2>텍스트·오디오 내용과 가격 고지</h2></div>{selected.priceDisclosure && <div data-testid="saved-price-disclosure"><b>{selected.priceDisclosure.source}</b><p>표본 {selected.priceDisclosure.sampleCount} · 업데이트 {new Date(selected.priceDisclosure.updatedAt).toLocaleDateString("ko-KR")} · 확신도 {Math.round(selected.priceDisclosure.confidence*100)}%</p>{selected.priceDisclosure.sampleCount<30?<p className="warning">표본 30 미만: 가격 범위 비공개</p>:selected.priceDisclosure.priceCents!=null&&<p>{money(selected.priceDisclosure.priceCents)}</p>}</div>}<form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const field = (name: string) => String(form.get(name) ?? "").trim(); void act(() => call(`/api/requests/${selected.id}/details`, "POST", { workScope:{symptom:[field("symptom"),field("audioTranscript")].filter(Boolean).join("\n"),location:field("location"),dimensions:field("dimensions"),access:field("access"),desiredTime:new Date(field("desiredTime")).toISOString(),photos:mediaState.map(value=>value.split(":")[0]),exclusions:[field("exclusions")]}, triage:{category:field("category"),urgency:form.get("urgency"),possibleCauses:[field("possibleCause")],confidence:Number(form.get("causeConfidence"))/100,questions:[field("additionalQuestions")],hazards:[]},priceDisclosure:{source:field("priceSource"),sampleCount:Number(form.get("sampleCount")),updatedAt:new Date(field("priceUpdatedAt")).toISOString(),confidence:Number(form.get("priceConfidence"))/100,priceCents:Math.round(Number(form.get("samplePrice"))*100)},priceDisclosureAccepted:true }), "구조화 작업 범위와 triage를 저장했습니다."); }}><label>카테고리<input name="category" required/></label><label>증상 텍스트<input name="symptom" required/></label><label>오디오 intake 녹취<textarea name="audioTranscript" placeholder="음성 입력을 텍스트로 확인·수정 후 저장"/></label><label>위치<input name="location" required/></label><label>치수<input name="dimensions" required/></label><label>접근 조건<input name="access" required/></label><label>희망 시간<input name="desiredTime" type="datetime-local" required/></label><label>제외 범위<input name="exclusions" required/></label><label>가능 원인<input name="possibleCause" required/></label><label>원인 확신도 %<input name="causeConfidence" type="number" min="0" max="100" required/></label><label>추가 질문<textarea name="additionalQuestions" required/></label><label>긴급도<select name="urgency"><option value="routine">일반</option><option value="urgent">긴급</option><option value="emergency">응급</option></select></label><label>가격 출처<input name="priceSource" required/></label><label>표본 수<input name="sampleCount" type="number" min="0" required/></label><label>가격 업데이트<input name="priceUpdatedAt" type="datetime-local" required/></label><label>가격 확신도 %<input name="priceConfidence" type="number" min="0" max="100" required/></label><label>표본 가격 USD<input name="samplePrice" type="number" min="0" step=".01" required/></label><label><input name="priceDisclosure" type="checkbox" required/> 실제 견적이 표본 가격과 다를 수 있음에 동의</label><button disabled={busy}>범위·triage 저장</button></form></section>
+    <section className="panel" data-testid="media-privacy"><div className="section-title"><p>미디어 · 개인정보</p><h2>Private Storage 업로드 (최대 10개)</h2></div><form onSubmit={(event) => { event.preventDefault(); const input = event.currentTarget.elements.namedItem("media") as HTMLInputElement; const files = Array.from(input.files ?? []); if (!files.length || files.length > 10) { setMediaState([files.length > 10 ? "최대 10개까지만 등록됩니다." : "파일을 선택하세요."]); return; } void act(async () => { const results:string[]=[];for(const file of files){const checksum=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer()))).map(value=>value.toString(16).padStart(2,"0")).join("");const record=await call<{id:string;uploadUrl:string;status:string}>(`/api/requests/${selected.id}/media`,"POST",{fileName:file.name,contentType:file.type,sizeBytes:file.size,checksum});const upload=async(url:string)=>{const data=new FormData();data.append("cacheControl","3600");data.append("",file);return fetch(url,{method:"PUT",headers:{"x-upsert":"false"},body:data});};let response=await upload(record.uploadUrl);if(!response.ok){const resumed=await call<{uploadUrl:string}>(`/api/media/${record.id}/upload-url`,"POST",{});response=await upload(resumed.uploadUrl);}if(!response.ok)throw new Error(`${file.name} 업로드 재개에 실패했습니다.`);await call(`/api/media/${record.id}/complete`,"POST",{checksum});results.push(`${record.id}: pending_scan · EXIF pending`);}setMediaState(results); }, "비공개 업로드를 완료하고 검사 대기열에 등록했습니다."); }}><label>JPEG·PNG·MP4·WEBM/MP3 오디오 (각 25MB 이하)<input name="media" type="file" accept="image/jpeg,image/png,video/mp4,audio/webm,audio/mpeg" capture="user" multiple required/></label><button disabled={busy}>비공개 업로드</button></form><p className="warning" data-testid="media-safety-state">{mediaState.length ? mediaState.join(" · ") : "업로드 실패 시 서명 URL을 한 번 갱신해 재개합니다. sanitized derivative와 EXIF removed 확인 전 원본 공유가 차단됩니다."}</p><div className="split"><button disabled={busy} onClick={() => void act(() => call("/api/privacy/consent", "POST", { version: "2026-09-p0", accepted: true }), "개인정보 처리 동의를 기록했습니다.")}>개인정보 처리 동의</button><button className="danger" disabled={busy} onClick={() => void act(() => call("/api/privacy/deletion", "POST", {}), "개인정보 삭제 요청을 접수했습니다.")}>삭제 요청</button></div></section>
+    </>}
+    <section className="panel span-two" data-testid="quote-comparison"><div className="section-title"><p>{es ? "PRESUPUESTOS" : en ? "QUOTES" : "견적 비교"}</p><h2>{es ? "Compare técnicos y alcance" : en ? "Compare technicians and scope" : "서버 정책이 산정한 복합 순위"}</h2></div>{!paymentsEnabled && <p className="payment-unavailable" data-testid="payment-unavailable">{es ? "Los pagos en línea todavía no están disponibles. No se ha cobrado ningún importe." : en ? "Online payments are not available yet. No payment has been taken." : "온라인 결제는 아직 사용할 수 없습니다. 결제된 금액은 없습니다."}</p>}<p className="warning" data-testid="pricing-sample-state">{es ? "Si llegan menos de tres presupuestos en 24 horas, ampliaremos la búsqueda." : en ? "If fewer than three quotes arrive within 24 hours, we’ll expand the search." : "24시간 내 견적이 3개 미만이면 탐색을 확대합니다. 화면은 서버가 제공한 순서를 그대로 표시합니다."}</p><div className="quote-grid">{quotes.length ? quotes.map((quote,index) => <article className="quote" data-testid={`ranked-quote-${index + 1}`} key={quote.id}><span>{es ? `Opción ${index + 1} · puntuación ${quote.rankingScore}` : en ? `Option ${index + 1} · score ${quote.rankingScore}` : `복합 순위 ${index + 1} · 점수 ${quote.rankingScore} · 정책 ${quote.rankingPolicyVersion}${quote.explorationSelected ? " · 15% 신규 공급자 탐색" : ""}`}</span><h3>{quote.providerName}</h3><p>{quote.scope}</p><strong>{money(quote.amountCents)}</strong><small>{es ? "Total" : en ? "Total" : "승인 요소 · 총액"} {money(quote.ranking.totalCents)} · {es ? "Inicio" : en ? "Start" : "시작"} {new Date(quote.ranking.earliestStartAt).toLocaleString(es ? "es-US" : en ? "en-US" : "ko-KR")} · {es ? "Garantía" : en ? "Warranty" : "보증"} {quote.ranking.warrantyDays} {es ? "días" : en ? "days" : "일"}</small><small>{es ? "Licencia" : en ? "License" : "면허"} {quote.ranking.licenseVerified ? es ? "verificada" : en ? "verified" : "확인" : es ? "sin verificar" : en ? "unverified" : "미확인"} · {es ? "Seguro" : en ? "Insurance" : "보험"} {quote.ranking.insuranceVerified ? es ? "verificado" : en ? "verified" : "확인" : es ? "sin verificar" : en ? "unverified" : "미확인"} · {es ? "Calificación" : en ? "Rating" : "평점"} {quote.ranking.rating ?? (es ? "no disponible" : en ? "unavailable" : "없음")} · {es ? "Distancia" : en ? "Distance" : "거리"} {quote.ranking.distanceMiles ?? (es ? "no disponible" : en ? "unavailable" : "없음")}mi · {es ? "Respuesta" : en ? "Response" : "응답"} {quote.ranking.responseMinutes ?? (es ? "no disponible" : en ? "unavailable" : "없음")}{es || en ? " min" : "분"} · {es ? "Idiomas" : en ? "Languages" : "언어"} {quote.ranking.languages?.join(", ") || (es ? "no disponibles" : en ? "unavailable" : "없음")}</small><small>{es ? "Depósito" : en ? "Deposit" : "보증금"} {money(Math.round(quote.amountCents * .2))}</small>{!job && <button disabled={busy || selected.safetyStatus !== "cleared" || !paymentsEnabled} onClick={() => setPayment({ kind: "deposit", quote })}>{es ? "Elegir este presupuesto" : en ? "Choose this quote" : "이 견적 선택"}</button>}</article>) : <Empty text={es ? "Estamos buscando técnicos disponibles. Los presupuestos aparecerán aquí." : en ? "We’re looking for available technicians. Quotes will appear here." : "운영자가 공급자를 배정하면 견적이 도착합니다."}/ >}</div></section>
+    {(job || changes.length > 0) && <section className="panel" data-testid="change-orders"><div className="section-title"><p>{es ? "CAMBIOS" : en ? "CHANGES" : "변경 주문"}</p><h2>{es ? "Revise cualquier trabajo adicional" : en ? "Review any additional work" : "제안 내용과 항목별 금액 승인"}</h2></div>{job && <p>{es ? "Depósito pagado" : en ? "Deposit paid" : "결제된 보증금"} <strong>{money(job.depositCents)}</strong></p>}{changes.length ? changes.map((change) => <div className="change-card" key={change.id}><b>{change.description}</b>{change.items.map((item) => <small key={item.description}>{item.description} · {item.quantity} × {money(item.unitCents)}</small>)}<small>{es ? "Evidencia vinculada" : en ? "Linked evidence" : "연결 증거"} {change.evidenceIds.join(", ")}</small><strong>{money(change.amountCents)}</strong>{change.approvedAt ? <span className="pill cleared">{es ? "Aprobado" : en ? "Approved" : "승인됨"}</span> : <button disabled={busy} onClick={() => void act(() => call(`/api/changes/${change.id}/approve`, "POST", {}), es ? "Cambio aprobado." : en ? "Change approved." : "변경 주문을 승인했습니다.")}>{es ? "Aprobar cambio" : en ? "Approve change" : "변경 승인"}</button>}</div>) : <Empty text={es ? "No hay cambios propuestos." : en ? "No changes have been proposed." : "변경 주문이 없습니다."}/ >}</section>}
+    <section className="panel" data-testid="coordination"><div className="section-title"><p>{es ? "MENSAJES Y HORARIO" : en ? "MESSAGES & SCHEDULE" : "메시지 · 일정"}</p><h2>{es ? "Coordine la visita" : en ? "Coordinate the visit" : "작업별 조율"}</h2></div><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(async()=>{const message=await call<{text?:string;body?:string}>(`/api/requests/${selected.id}/messages`, "POST", { text: form.get("text") });setSentMessages(values=>[...values,message.text??message.body??""]);}, es ? "Mensaje enviado." : en ? "Message sent." : "연락처를 마스킹해 메시지를 전송했습니다."); }}><label>{es ? "Mensaje" : en ? "Message" : "메시지"}<textarea name="text" required maxLength={2000}/></label><button disabled={busy}>{es ? "Enviar mensaje" : en ? "Send message" : "메시지 전송"}</button></form>{sentMessages.map((text,index)=><p className="warning" key={`${text}-${index}`}>{text}</p>)}<form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(() => call(`/api/requests/${selected.id}/schedule`, "PUT", { startsAt: new Date(String(form.get("startsAt"))).toISOString(), timeZone: "America/New_York", status: form.get("status") }), es ? "Horario guardado." : en ? "Schedule saved." : "일정을 저장했습니다."); }}><label>{es ? "Hora de la visita en Charlotte" : en ? "Charlotte visit time" : "Charlotte 방문 시각"}<input name="startsAt" type="datetime-local" required/></label><label>{es ? "Estado" : en ? "Status" : "상태"}<select name="status"><option value="proposed">{es ? "Propuesto" : en ? "Proposed" : "제안"}</option><option value="confirmed">{es ? "Confirmado" : en ? "Confirmed" : "확정"}</option></select></label><button disabled={busy}>{es ? "Guardar horario" : en ? "Save schedule" : "일정 저장"}</button></form></section>
+    {job?.completedAt && <section className="panel" data-testid="completion-protection"><div className="section-title"><p>{es ? "PROTECCIÓN DE 72 HORAS" : en ? "72-HOUR PROTECTION" : "완료 · 72시간 보호"}</p><h2>{es ? "Informe cualquier problema antes del pago final" : en ? "Report any issue before final payment" : "문제가 있으면 정산 전에 접수하세요"}</h2></div>{selectedQuote && !job.settledAt && <button className="primary" disabled={busy || !paymentsEnabled} onClick={() => setPayment({ kind: "balance", quote: selectedQuote })}>{es ? "Pagar saldo" : en ? "Pay balance" : "잔금 결제"}</button>}<form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(() => call(`/api/requests/${selected.id}/disputes`, "POST", { source: "internal", reason: form.get("reason") }), es ? "Problema reportado; el pago está pausado." : en ? "Issue reported; settlement is paused." : "분쟁이 접수되어 정산을 중지했습니다."); }}><label>{es ? "Describa el problema" : en ? "Describe the issue" : "문제 내용"}<textarea name="reason" required minLength={3}/></label><button className="danger" disabled={busy}>{es ? "Reportar problema" : en ? "Report issue" : "분쟁 접수"}</button></form>{disputes.map((item) => <p className="warning" key={item.id}>{item.status} · {item.reason}</p>)}{job.settledAt && <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(() => call(`/api/requests/${selected.id}/reviews`, "POST", { rating: Number(form.get("rating")), text: form.get("text") }), es ? "Reseña enviada." : en ? "Review submitted." : "리뷰를 등록했습니다."); }}><label>{es ? "Calificación" : en ? "Rating" : "평점"}<select name="rating"><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label><label>{es ? "Reseña" : en ? "Review" : "리뷰"}<textarea name="text" required minLength={3}/></label><button disabled={busy}>{es ? "Enviar reseña" : en ? "Submit review" : "리뷰 등록"}</button></form>}</section>}
+    {payment && <PaymentDialog payment={payment} requestId={selected.id} busy={busy} locale={hasChatScope ? locale : undefined} close={() => setPayment(null)} act={act} call={call}/>}</div>;
+}
+
+function ChatScopeSummary({ scope, locale }: { scope: Record<string, unknown>; locale: "en" | "es" }) {
+  const fields = locale === "es" ? [["symptom", "Síntoma"], ["location", "Ubicación"], ["dimensions", "Medidas"], ["access", "Acceso"], ["desiredTime", "Horario deseado"], ["exclusions", "Exclusiones"]] as const : [["symptom", "Symptom"], ["location", "Location"], ["dimensions", "Dimensions"], ["access", "Access"], ["desiredTime", "Preferred time"], ["exclusions", "Exclusions"]] as const;
+  const present = fields.map(([key, label]) => ({ key, label, value: scope[key] })).filter(({ value }) => value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0));
+  return <section className="panel span-two scope-summary" data-testid="chat-scope-summary"><div className="section-title"><p>{locale === "es" ? "RESUMEN DE LA CONSULTA" : "CONSULTATION SUMMARY"}</p><h2>{locale === "es" ? "Solicitud de reparación confirmada" : "Confirmed repair request"}</h2></div><p className="warning">{locale === "es" ? "Este es un alcance provisional basado en la consulta. El técnico debe confirmar la causa en el lugar." : "This is a provisional scope based on the consultation. The technician must confirm the cause on site."}</p>{present.length > 0 && <dl>{present.map(({ key, label, value }) => <div key={key}><dt>{label}</dt><dd>{Array.isArray(value) ? value.join(", ") : String(value)}</dd></div>)}</dl>}</section>;
+}
+
+function PaymentDialog({ payment, requestId, busy, locale, close, act, call }: { payment: { kind: "deposit" | "balance"; quote?: Quote }; requestId: string; busy: boolean; locale?: "en" | "es"; close: () => void; act: Action; call: Caller }) {
+  const amount = payment.kind === "deposit" && payment.quote ? Math.round(payment.quote.amountCents * .2) : payment.quote ? payment.quote.amountCents - Math.round(payment.quote.amountCents * .2) : 0;
+  const es = locale === "es", en = locale === "en";
+  return <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="payment-title" data-testid="payment-confirmation"><h2 id="payment-title">{es ? payment.kind === "deposit" ? "Confirmar depósito del 20%" : "Confirmar saldo" : en ? payment.kind === "deposit" ? "Confirm 20% deposit" : "Confirm balance" : `${payment.kind === "deposit" ? "20% 보증금" : "잔금"} 결제 확인`}</h2><p><strong>{money(amount)}</strong> {es ? "El estado cambiará solo después de que Stripe confirme el pago." : en ? "The status changes only after Stripe confirms the payment." : "결제를 Stripe에서 확인합니다. 결제가 확인되기 전에는 상태가 변경되지 않습니다."}</p><div className="modal-actions"><button onClick={close}>{es ? "Cancelar" : en ? "Cancel" : "취소"}</button><button className="primary" disabled={busy} onClick={() => void act(async () => { const result = await call<{ state?: string; clientSecret?: string }>(`/api/requests/${requestId}/${payment.kind}`, "POST", payment.kind === "deposit" ? { quoteId: payment.quote?.id } : {}, crypto.randomUUID()); if (result.clientSecret) await confirmStripePayment(result.clientSecret); else if (result.state !== "completed") throw new Error(es ? "Falta la confirmación del pago." : en ? "Payment confirmation is missing." : "결제 확인 정보가 응답에 없습니다."); close(); }, es ? "Pago confirmado." : en ? "Payment confirmed." : "결제를 확인했습니다.")}>{es ? "Confirmar pago" : en ? "Confirm payment" : "결제 확인"}</button></div></section></div>;
+}
+
+function ProviderView({ selected, evidence, busy, act, call }: { selected?: ServiceRequest; evidence: Evidence[]; busy: boolean; act: Action; call: Caller }) {
+  if (!selected) return <Empty text="현재 배정된 요청이 없습니다."/>;
+  return <div className="dashboard-grid" data-testid="provider-inbox"><section className="panel"><div className="section-title"><p>공급자 INBOX</p><h2>{selected.description}</h2></div><p>{selected.address}</p><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const amountCents = Math.round(Number(form.get("amount")) * 100); void act(() => call(`/api/requests/${selected.id}/quotes`, "POST", { providerName: form.get("providerName"), scope: form.get("scope"), amountCents, ranking: { totalCents: amountCents, earliestStartAt: new Date(String(form.get("earliestStartAt"))).toISOString(), warrantyDays: Number(form.get("warrantyDays")) } }), "견적과 복합 순위 요소를 고객에게 전송했습니다."); }}><label>상호<input name="providerName" required/></label><label>작업 범위<textarea name="scope" required minLength={5}/></label><label>총 견적 USD<input name="amount" type="number" min=".01" max="999999.99" step=".01" required/></label><label>가장 빠른 시작<input name="earliestStartAt" type="datetime-local" required/></label><label>보증 일수<input name="warrantyDays" type="number" min="0" step="1" required/></label><button className="primary" disabled={busy}>견적 제출</button></form></section>
+    <AttachmentGallery requestId={selected.id} call={call}/>
+    <section className="panel" data-testid="provider-evidence"><div className="section-title"><p>작업 증거</p><h2>Before · During · After · 영수증 · 보증</h2></div><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(() => call(`/api/requests/${selected.id}/evidence`, "POST", { kind: form.get("kind"), note: form.get("note") }), "작업 증거 설명을 기록했습니다."); }}><label>단계<select name="kind"><option value="before">Before</option><option value="during">During</option><option value="after">After</option><option value="receipt">영수증</option><option value="warranty">보증</option></select></label><label>증거 설명<textarea name="note" required minLength={3}/></label><button disabled={busy}>증거 기록</button></form>{evidence.map((item) => <div className="row" key={item.id}><b>{item.kind}</b><span>{item.note}</span></div>)}</section>
+    <section className="panel span-two"><div className="section-title"><p>변경 및 완료</p><h2>항목과 증거를 포함한 불변 변경 주문</h2></div><div className="split"><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const quantity = Number(form.get("quantity")), unitCents = Math.round(Number(form.get("unitAmount")) * 100); void act(() => call(`/api/requests/${selected.id}/changes`, "POST", { description: form.get("description"), amountCents: quantity * unitCents, items: [{ description: form.get("itemDescription"), quantity, unitCents }], evidenceIds: form.getAll("evidenceIds") }), "증거가 연결된 변경 승인을 요청했습니다."); }}><label>변경 사유<input name="description" required minLength={3}/></label><label>항목 설명<input name="itemDescription" required/></label><label>수량<input name="quantity" type="number" min="1" step="1" required/></label><label>단가 USD<input name="unitAmount" type="number" min="0" max="999999.99" step=".01" required/></label><label>연결 증거 (1개 이상)<select name="evidenceIds" multiple required>{evidence.map((item) => <option key={item.id} value={item.id}>{item.kind} · {item.note}</option>)}</select></label>{evidence.length === 0 && <p className="warning">먼저 증거를 기록하세요.</p>}<button disabled={busy || evidence.length === 0}>변경 승인 요청</button></form><div>{selected.status === "funded" && <button disabled={busy} onClick={() => void act(() => call(`/api/requests/${selected.id}/start`, "POST", {}), "작업을 시작했습니다.")}>작업 시작</button>}<p>Before와 After 증거 설명이 모두 기록되어야 완료할 수 있습니다.</p><button className="primary" disabled={busy || selected.status !== "in_progress"} onClick={() => void act(() => call(`/api/requests/${selected.id}/complete`, "POST", {}), "작업 완료와 72시간 보호가 시작되었습니다.")}>작업 완료 제출</button></div></div></section></div>;
+}
+
+function OperatorView({ dashboard, selected, disputes, busy, act, call }: { dashboard: Dashboard; selected?: ServiceRequest; disputes: Dispute[]; busy: boolean; act: Action; call: Caller }) {
+  const [recovery,setRecovery]=useState<{claims:Array<{claimId?:string;kind?:string}>;receivables:Array<{id:string;amountCents:number;reason:string}>}|null>(null);
+  return <div className="dashboard-grid" data-testid="operator-console"><section className="panel"><div className="section-title"><p>매칭 · 위험</p><h2>Charlotte 파일럿 관제</h2></div><div className="metrics"><div><strong>{dashboard.requests.length}</strong><span>요청</span></div><div><strong>{dashboard.requests.filter((item) => item.safetyStatus === "blocked").length}</strong><span>위험 차단</span></div><div><strong>{disputes.filter((item) => item.status === "open").length}</strong><span>분쟁</span></div></div>{selected && <><p className={selected.safetyStatus === "cleared" ? "success-note" : "danger-note"}>{selected.safetyStatus === "cleared" ? "안전 확인됨 · 매칭 가능" : `위험 차단 · ${selected.hazardReason ?? "검토 필요"}`}</p><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const providerIds = [form.get("provider1"), form.get("provider2"), form.get("provider3")].map(String).map((value) => value.trim()).filter(Boolean); void act(() => call(`/api/requests/${selected.id}/match`, "POST", { providerIds }), "공급자를 매칭했습니다."); }}><label>공급자 1 ID<input name="provider1" defaultValue="provider-1" required/></label><label>공급자 2 ID<input name="provider2" defaultValue="provider-2"/></label><label>공급자 3 ID<input name="provider3"/></label><button disabled={busy || selected.safetyStatus !== "cleared"}>공급자 매칭</button></form></>}</section>
+    <section className="panel"><div className="section-title"><p>분쟁 · 환불</p><h2>보호 조치 센터</h2></div>{disputes.map((item) => <div className="row" key={item.id}><span>{item.source} · {item.reason}</span>{item.status === "open" && <button disabled={busy} onClick={() => void act(() => call(`/api/disputes/${item.id}/resolve`, "POST", {}), "분쟁을 해결했습니다.")}>해결</button>}</div>)}{selected && <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void act(() => call(`/api/requests/${selected.id}/refunds`, "POST", { amountCents: Math.round(Number(form.get("amount")) * 100), reason: form.get("reason") }, crypto.randomUUID()), "환불을 처리했습니다."); }}><label>환불 금액 USD<input name="amount" type="number" min=".01" step=".01" required/></label><label>환불 사유<input name="reason" required minLength={3}/></label><button className="danger" disabled={busy}>환불 실행</button></form>}</section>
+    <section className="panel" data-testid="provider-eligibility"><div className="section-title"><p>공급자 자격</p><h2>면허·보험·서비스 승인</h2></div><form onSubmit={(event)=>{event.preventDefault();const form=new FormData(event.currentTarget);void act(()=>call(`/api/operators/providers/${form.get("providerId")}/eligibility`,"PUT",{status:form.get("status"),organizationName:form.get("organizationName"),licenseVerified:true,licenseExpiresAt:new Date(String(form.get("licenseExpiresAt"))).toISOString(),insuranceVerified:true,insuranceExpiresAt:new Date(String(form.get("insuranceExpiresAt"))).toISOString(),serviceCategories:["general"],serviceAreas:["Charlotte"]}),"공급자 자격을 저장했습니다.");}}><label>공급자 ID<input name="providerId" required/></label><label>조직명<input name="organizationName" required/></label><label>상태<select name="status"><option value="approved">승인</option><option value="pending">대기</option><option value="suspended">중지</option></select></label><label>면허 만료<input name="licenseExpiresAt" type="datetime-local" required/></label><label>보험 만료<input name="insuranceExpiresAt" type="datetime-local" required/></label><button disabled={busy}>자격 저장</button></form></section>
+    <section className="panel" data-testid="recovery-console"><div className="section-title"><p>결제 복구</p><h2>미완료 클레임·미수금</h2></div><button disabled={busy} onClick={()=>void act(async()=>setRecovery(await call("/api/ops/recovery")),"복구 목록을 불러왔습니다.")}>복구 목록 새로고침</button>{recovery?.claims.map((claim,index)=><p key={claim.claimId??index}>{claim.kind??"claim"} · {claim.claimId}</p>)}{recovery?.receivables.map(item=><div className="row" key={item.id}><span>{money(item.amountCents)} · {item.reason}</span><button disabled={busy} onClick={()=>void act(async()=>{await call(`/api/ops/recovery/receivables/${item.id}/resolve`,"POST",{});setRecovery(await call("/api/ops/recovery"));},"미수금을 해결했습니다.")}>미수금 해결</button></div>)}</section>
+    <section className="panel span-two"><div className="section-title"><p>정산 · 불변 감사</p><h2>보호 기간과 분쟁 확인 후 정산</h2></div>{selected?.status === "completed" && <button className="primary" disabled={busy || disputes.some((item) => item.status === "open")} onClick={() => void act(async () => { const authorization = await call<Record<string, unknown>>(`/api/requests/${selected.id}/settlement-preflight`, "POST", {}); return call(`/api/requests/${selected.id}/settle`, "POST", authorization, crypto.randomUUID()); }, "정산을 실행했습니다.")}>정산 실행</button>}<div className="audit-list" data-testid="audit-log">{dashboard.audit.slice().reverse().map((item) => <div className="row" key={item.id}><code>{item.action}</code><span>{new Date(item.at).toLocaleString("ko-KR")}</span></div>)}</div></section></div>;
+}
+
+function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }

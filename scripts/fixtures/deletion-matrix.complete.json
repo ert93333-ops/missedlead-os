@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "release_approved": false,
+  "completed_erasure_irreversible": true,
+  "backup_restore": {
+    "tombstone_replay_before_access": true,
+    "access_blocked_until_replay": true
+  },
+  "classes": [
+    {
+      "class": "Auth identity/session",
+      "action": "erase",
+      "reason": "Remove account credentials and active access when verified deletion completes.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "identity owner"
+    },
+    {
+      "class": "profile/address/property",
+      "action": "erase",
+      "reason": "Remove account-linked profile and service-location data when verified deletion completes.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "customer data owner"
+    },
+    {
+      "class": "requests/details/messages/translations",
+      "action": "erase",
+      "reason": "Remove account-linked request content and derived communication content.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "service operations owner"
+    },
+    {
+      "class": "intake media",
+      "action": "erase",
+      "reason": "Remove uploaded and derived intake media associated with the deleted account.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "intake data owner"
+    },
+    {
+      "class": "provider evidence/documents",
+      "action": "erase",
+      "reason": "Remove account-linked provider submissions that have no separately approved retention basis.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "provider operations owner"
+    },
+    {
+      "class": "notifications",
+      "action": "erase",
+      "reason": "Remove queued notifications, delivery payloads, and account-linked notification history.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "communications owner"
+    },
+    {
+      "class": "audit/logs",
+      "action": "policy_pending",
+      "reason": "Retention and acceptable de-identification require an owner decision informed by counsel.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "restore_restricted_retained_only",
+      "data_owner": "security and compliance owner"
+    },
+    {
+      "class": "financial/legal records",
+      "action": "policy_pending",
+      "reason": "Record categories and retention periods require an owner decision informed by counsel.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "restore_restricted_retained_only",
+      "data_owner": "finance and legal owner"
+    },
+    {
+      "class": "caches",
+      "action": "erase",
+      "reason": "Invalidate account-linked cached values so deletion is reflected on every access path.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "not_restorable",
+      "data_owner": "platform operations owner"
+    },
+    {
+      "class": "exports",
+      "action": "erase",
+      "reason": "Remove server-controlled generated exports associated with the deleted account.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "customer data owner"
+    },
+    {
+      "class": "backups",
+      "action": "policy_pending",
+      "reason": "Backup expiry and destruction schedule require an owner decision informed by counsel and recovery requirements.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "platform operations owner"
+    },
+    {
+      "class": "deletion tombstones/progress",
+      "action": "policy_pending",
+      "reason": "The minimum safe lifetime must cover restorations, while the final retention period requires owner approval.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "restore_restricted_retained_only",
+      "data_owner": "privacy operations owner"
+    }
+  ]
+}

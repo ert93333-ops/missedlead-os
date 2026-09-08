@@ -1,0 +1,36 @@
+{
+  "name": "wecover-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --port 8082",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit",
+    "export": "expo export --platform all",
+    "test": "node --experimental-transform-types --test src/chat/protocol.test.mjs",
+    "build:web": "expo export --platform web --output-dir dist-web --max-workers 1"
+  },
+  "dependencies": {
+    "@react-native-community/datetimepicker": "9.1.0",
+    "@stripe/stripe-react-native": "0.64.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "expo": "~57.0.20",
+    "expo-document-picker": "~57.0.1",
+    "expo-file-system": "~57.0.6",
+    "expo-image-picker": "~57.0.16",
+    "expo-secure-store": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-web": "^0.21.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

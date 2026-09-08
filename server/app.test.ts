@@ -1,557 +1,78 @@
-import request from 'supertest'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createApp } from './app'
-import { createCaseStore, type CaseStore } from './db'
-import { createEvidenceStorage, type EvidenceStorage } from './evidenceStorage'
-import type { AuthConfig } from './auth'
-import { createMaintenanceStore, type MaintenanceStore } from './maintenanceDb'
-import { charlottePilotTerms } from '../src/maintenance'
-import { createPlatformStore, type PlatformStore } from './platformDb'
-import { createIdentityStore, type IdentityStore } from './identityDb'
+import { describe, expect, it } from "vitest";
+import request from "supertest";
+import { createApp, InMemoryRepository, type AuthAdapter, type StripePayments } from "./app.js";
+import { reconcilePayments } from "./jobs/reconcilePayments.js";
+import { checkedStripeAmount, compositeQuoteScore, SupabaseRepository } from "./repository.js";
+import { readFileSync } from "node:fs";
 
-let store: CaseStore
-let evidenceStorage: EvidenceStorage
-let evidenceRoot: string
-let maintenance: MaintenanceStore
-let platform: PlatformStore
-let identity: IdentityStore
-
-beforeEach(async () => {
-  store = createCaseStore(':memory:')
-  evidenceRoot = await mkdtemp(join(tmpdir(), 'missedlead-evidence-'))
-  evidenceStorage = createEvidenceStorage(evidenceRoot)
-  maintenance = createMaintenanceStore(':memory:')
-  platform = createPlatformStore(':memory:')
-  identity = createIdentityStore(':memory:')
-})
-afterEach(async () => {
-  store.close()
-  maintenance.close()
-  platform.close()
-  identity.close()
-  await rm(evidenceRoot, { recursive: true, force: true })
-})
-
-const validCase = {
-  customerName: 'Alex Morgan', phone: '+15125550142', summary: 'Water under kitchen sink', consentToText: true,
-  evidence: [
-    { label: 'Leak overview video', observed: true, weight: 18 },
-    { label: 'P-trap close-up', observed: true, weight: 16 },
-  ],
+const actors={customer:{id:"customer",role:"customer" as const},provider:{id:"provider",role:"provider" as const},operator:{id:"operator",role:"operator" as const},other:{id:"other",role:"customer" as const}};
+const auth:AuthAdapter={async authenticate(token){return actors[token as keyof typeof actors]??null}};
+const bearer=(token:string)=>({Authorization:`Bearer ${token}`});
+class FakeStripe implements StripePayments {
+  calls={payment:0,transfer:0,refund:0,reverse:0}; requestId=""; eventId="evt_1"; objectId="pi_1"; eventType="payment_intent.succeeded"; disputeStatus="needs_response"; amount=0; transfers=new Map<string,string>(); releaseTransfer?:()=>void;
+  async createCustomerPayment(){this.calls.payment++;return{id:`pi_${this.calls.payment}`,clientSecret:`pi_${this.calls.payment}_secret_confirm`}}
+  async transfer(_amount:number,_destination:string|undefined,key:string){this.calls.transfer++;if(this.releaseTransfer)await new Promise<void>(resolve=>{const prior=this.releaseTransfer!;this.releaseTransfer=()=>{prior();resolve()}});const id=`tr_${this.calls.transfer}`;this.transfers.set(key,id);return id}
+  async refund(paymentIntentId:string,amount:number){this.calls.refund++;return `re_${paymentIntentId}_${amount}`}
+  async reverse(_transferId:string,amount:number){this.calls.reverse++;return `rv_${amount}_${this.calls.reverse}`}
+  async findTransfer(key:string){return this.transfers.get(key)}
+  async findReversal(){return undefined}
+  constructWebhook(){return{id:this.eventId,type:this.eventType,data:{object:{id:this.objectId,metadata:{requestId:this.requestId},reason:"fraudulent",status:this.disputeStatus,amount:this.amount}}}}
 }
-const testAuth: AuthConfig = { accessCode: 'test-access-code', sessionSecret: 'test-session-secret-that-is-long', secureCookies: false }
-const roleAuth: AuthConfig = {
-  accessCode: 'unused-bootstrap-code',
-  sessionSecret: 'test-session-secret-that-is-long',
-  secureCookies: false,
-  users: [
-    { id: 'home-1', organizationId: 'household-1', email: 'home@example.com', displayName: 'Home Owner', role: 'homeowner', accessCode: 'home-code' },
-    { id: 'home-2', organizationId: 'household-2', email: 'other@example.com', displayName: 'Other Owner', role: 'homeowner', accessCode: 'other-code' },
-    { id: 'provider-1', organizationId: 'provider-org', email: 'pro@example.com', displayName: 'Service Pro', role: 'provider', accessCode: 'pro-code' },
-    { id: 'admin-1', organizationId: 'platform', email: 'admin@example.com', displayName: 'Operator', role: 'admin', accessCode: 'admin-code' },
-  ],
-}
+const testPaymentApproval=(at:Date)=>({receipt:{mode:"enabled" as const,environmentHash:"1".repeat(64),projectHash:"2".repeat(64),gitSha:"3".repeat(40),migrationHead:"test-migration",capabilityHashes:{payments:"4".repeat(64)},issuedAt:"2026-08-31T00:00:00.000Z",expiresAt:"2026-09-10T00:00:00.000Z",keyId:"test-key",signature:"synthetic"},expectedBinding:{environmentHash:"1".repeat(64),projectHash:"2".repeat(64),gitSha:"3".repeat(40),migrationHead:"test-migration",capabilityHashes:{payments:"4".repeat(64)}},verifySignature:()=>true,now:at});
+const setup=(now=()=>new Date("2026-09-01T00:00:00Z"))=>{const repository=new InMemoryRepository(),stripe=new FakeStripe();repository.inspect(s=>{s.providerEligibility.provider={status:"approved",organizationName:"Mint",licenseVerified:true,licenseExpiresAt:"2027-01-01T00:00:00Z",insuranceVerified:true,insuranceExpiresAt:"2027-01-01T00:00:00Z",serviceCategories:["general"],serviceAreas:["Charlotte"]}});return{app:createApp({repository,stripe,auth,paymentsMode:"enabled",paymentApproval:testPaymentApproval(now()),now}),repository,stripe}};
+async function quoted(app:ReturnType<typeof createApp>,amountCents=10_003){const r=await request(app).post("/api/requests").set(bearer("customer")).send({customerName:"고객",description:"싱크대 누수 수리가 필요합니다",address:"Charlotte",hazards:["none"]}).expect(201);const requestId=r.body.id as string;await request(app).post(`/api/requests/${requestId}/match`).set(bearer("operator")).send({providerIds:[actors.provider.id]}).expect(200);const q=await request(app).post(`/api/requests/${requestId}/quotes`).set(bearer("provider")).send({providerName:"민트",scope:"진단 및 배관 교체",amountCents,ranking:{totalCents:amountCents,earliestStartAt:"2026-09-02T00:00:00.000Z",warrantyDays:90}}).expect(201);return{requestId,quoteId:q.body.id as string}}
+async function confirm(app:ReturnType<typeof createApp>,stripe:FakeStripe,requestId:string,objectId:string,eventId:string){stripe.requestId=requestId;stripe.objectId=objectId;stripe.eventId=eventId;stripe.eventType="payment_intent.succeeded";await request(app).post("/api/webhooks/stripe").set("stripe-signature","valid").set("Content-Type","application/json").send(Buffer.from(`{"id":"${eventId}"}`)).expect(201)}
+async function completedAndCaptured(app:ReturnType<typeof createApp>,stripe:FakeStripe,amount=10_003){const q=await quoted(app,amount);const dep=await request(app).post(`/api/requests/${q.requestId}/deposit`).set(bearer("customer")).set("Idempotency-Key","dep-1").send({quoteId:q.quoteId}).expect(202);expect(dep.body.clientSecret).toContain("_secret_");await confirm(app,stripe,q.requestId,dep.body.providerReference,"evt_dep");await request(app).post(`/api/requests/${q.requestId}/start`).set(bearer("provider")).send({}).expect(200);for(const kind of["before","after"])await request(app).post(`/api/requests/${q.requestId}/evidence`).set(bearer("provider")).send({kind,note:`${kind} evidence`}).expect(201);await request(app).post(`/api/requests/${q.requestId}/complete`).set(bearer("provider")).send({}).expect(200);const bal=await request(app).post(`/api/requests/${q.requestId}/balance`).set(bearer("customer")).set("Idempotency-Key","bal-1").send({}).expect(202);expect(bal.body.providerReference).not.toBe(dep.body.providerReference);await confirm(app,stripe,q.requestId,bal.body.providerReference,"evt_bal");return q}
 
-async function authenticatedAgent(options: Parameters<typeof createApp>[1] = {}) {
-  const agent = request.agent(createApp(store, { ...options, auth: testAuth }))
-  await agent.post('/api/session').send({ accessCode: testAuth.accessCode }).expect(200)
-  return agent
-}
+const settle=async(app:ReturnType<typeof createApp>,requestId:string,key="transfer")=>{const pre=await request(app).post(`/api/requests/${requestId}/settlement-preflight`).set(bearer("operator")).send({}).expect(200);return request(app).post(`/api/requests/${requestId}/settle`).set(bearer("operator")).set("Idempotency-Key",key).send(pre.body).expect(201)};
 
-describe('authentication', () => {
-  it('fails closed without auth configuration and rejects a bad code', async () => {
-    await request(createApp(store)).post('/api/cases').send(validCase).expect(503, { error: 'auth_not_configured' })
-    await request(createApp(store, { auth: testAuth })).post('/api/session').send({ accessCode: 'wrong' }).expect(401)
-  })
+describe("protected deployment readiness",()=>{
+  const hash=(digit:string)=>digit.repeat(64);
+  const manifest={schemaVersion:1 as const,environmentHash:hash("1"),projectHash:hash("2"),apiOriginHash:hash("3"),gitSha:"4".repeat(40),migrationHead:"202609060001_release",capabilityResultHashes:{payments:hash("5"),database:hash("6")},evidenceHashes:{tests:hash("7")},approvalReceiptId:"approval-key-1",rotationOwner:"platform-operations",revocationOwner:"security-operations",paymentsMode:"enabled" as const};
+  const paymentApproval={receipt:{mode:"enabled",environmentHash:manifest.environmentHash,projectHash:manifest.projectHash,gitSha:manifest.gitSha,migrationHead:manifest.migrationHead,capabilityHashes:manifest.capabilityResultHashes,issuedAt:"2026-08-31T00:00:00.000Z",expiresAt:"2026-09-02T00:00:00.000Z",keyId:manifest.approvalReceiptId,signature:"synthetic"},expectedBinding:{environmentHash:manifest.environmentHash,projectHash:manifest.projectHash,gitSha:manifest.gitSha,migrationHead:manifest.migrationHead,capabilityHashes:manifest.capabilityResultHashes},verifySignature:()=>true,now:new Date("2026-09-01T00:00:00.000Z")};
+  it("requires an allowlisted operator and exposes only states and hashes",async()=>{const app=createApp({repository:new InMemoryRepository(),stripe:new FakeStripe(),auth,operatorAllowlist:["operator"],paymentsMode:"enabled",paymentApproval,deploymentManifest:manifest});await request(app).get("/api/ops/readiness").expect(401);await request(app).get("/api/ops/readiness").set(bearer("customer")).expect(403);const response=await request(app).get("/api/ops/readiness").set(bearer("operator")).expect(200);expect(response.body).toMatchObject({ready:true,payments:{mode:"enabled",state:"ready"},capabilities:{database:{state:"bound",resultHash:hash("6")},payments:{state:"bound",resultHash:hash("5")}}});const serialized=JSON.stringify(response.body);expect(serialized).not.toContain(manifest.approvalReceiptId);expect(serialized).not.toContain(manifest.rotationOwner);expect(serialized).not.toContain(manifest.revocationOwner);expect(serialized).not.toContain(manifest.migrationHead);});
+  it("fails closed when payment mode or receipt identity does not match",async()=>{const identityMismatch=createApp({repository:new InMemoryRepository(),stripe:new FakeStripe(),auth,operatorAllowlist:["operator"],paymentsMode:"enabled",paymentApproval,deploymentManifest:{...manifest,approvalReceiptId:"different-approval"}});const identityResponse=await request(identityMismatch).get("/api/ops/readiness").set(bearer("operator")).expect(503);expect(identityResponse.body).toMatchObject({ready:false,payments:{mode:"enabled",state:"blocked"}});const modeMismatch=createApp({repository:new InMemoryRepository(),auth,operatorAllowlist:["operator"],paymentsMode:"disabled",paymentApproval,deploymentManifest:{...manifest,paymentsMode:"disabled"}});const modeResponse=await request(modeMismatch).get("/api/ops/readiness").set(bearer("operator")).expect(503);expect(modeResponse.body).toMatchObject({ready:false,payments:{mode:"disabled",state:"blocked"}});});
+});
 
-  it('requires a session for protected APIs', async () => {
-    await request(createApp(store, { auth: testAuth })).post('/api/cases').send(validCase).expect(401, { error: 'authentication_required' })
-  })
+describe("money lifecycle",()=>{
+  it("denies assigned providers immediately when suspended or credentials expire",async()=>{const{app,repository}=setup();const q=await quoted(app);repository.inspect(s=>{s.providerEligibility.provider.status="suspended"});expect(((await repository.dashboard(actors.provider,"")) as {requests:unknown[]}).requests).toHaveLength(0);await request(app).post(`/api/requests/${q.requestId}/quotes`).set(bearer("provider")).send({providerName:"blocked",scope:"blocked scope",amountCents:1000,ranking:{totalCents:1000,earliestStartAt:"2026-09-02T00:00:00.000Z",warrantyDays:0}}).expect(403);repository.inspect(s=>{s.providerEligibility.provider.status="approved";s.providerEligibility.provider.licenseExpiresAt="2026-01-01T00:00:00Z"});await request(app).post(`/api/requests/${q.requestId}/evidence`).set(bearer("provider")).send({kind:"before",note:"expired credential"}).expect(403);expect(((await repository.dashboard(actors.provider,"")) as {requests:unknown[]}).requests).toHaveLength(0)});
+  it("rejects Stripe operation overflow before provider side effects",async()=>{expect(()=>checkedStripeAmount("100000000")).toThrow("stripe_amount_out_of_range");expect(()=>checkedStripeAmount("9007199254740992")).toThrow("stripe_amount_out_of_range");expect(checkedStripeAmount("99999999")).toBe(99_999_999);const{app,stripe}=setup();const q=await quoted(app,99_999_999);await request(app).post(`/api/requests/${q.requestId}/quotes`).set(bearer("provider")).send({providerName:"duplicate",scope:"duplicate scope",amountCents:99_999_999,ranking:{totalCents:99_999_999,earliestStartAt:"2026-09-03T00:00:00.000Z",warrantyDays:0}}).expect(409);expect(stripe.calls.payment).toBe(0)});
+  it("returns separate confirmable deposit and balance PaymentIntents",async()=>{const{app,stripe,repository}=setup();const q=await completedAndCaptured(app,stripe,10_003);expect(stripe.calls.payment).toBe(2);expect(repository.inspect(s=>s.payments.filter(p=>p.requestId===q.requestId&&p.status==="succeeded").map(p=>[p.kind,p.amountCents]))).toEqual([["deposit",2001],["balance",8002]])});
+  it("selects one effective versioned fee policy and binds its immutable snapshot",async()=>{let clock=new Date("2026-09-01T00:00:00Z");const{app,stripe,repository}=setup(()=>clock);const q=await completedAndCaptured(app,stripe,10_000);clock=new Date("2026-09-04T00:00:00Z");const pre=await request(app).post(`/api/requests/${q.requestId}/settlement-preflight`).set(bearer("operator")).send({}).expect(200);expect(pre.body).toMatchObject({feeVersion:1,feeRateBps:1000,feeAmountCents:1000,capturedAmountCents:10000,transferAmountCents:9000});expect(repository.inspect(s=>s.jobs[q.requestId].feeSnapshot)).toMatchObject({policyId:"standard-v1",taxRateBps:0,stripeFeeTreatment:"included",refundTreatment:"fee_retained",rounding:"half_up"});await request(app).post(`/api/requests/${q.requestId}/settle`).set(bearer("operator")).set("Idempotency-Key","tampered").send({...pre.body,feeAmountCents:999}).expect(409);expect(stripe.calls.transfer).toBe(0)});
+  it("replays a completed settlement only for the original key and blocks terminal reauthorization",async()=>{let clock=new Date("2026-09-01T00:00:00Z");const{app,stripe}=setup(()=>clock);const q=await completedAndCaptured(app,stripe,10_000);clock=new Date("2026-09-04T00:00:00Z");const pre=await request(app).post(`/api/requests/${q.requestId}/settlement-preflight`).set(bearer("operator")).send({}).expect(200);await request(app).post(`/api/requests/${q.requestId}/settle`).set(bearer("operator")).set("Idempotency-Key","terminal").send(pre.body).expect(201);await request(app).post(`/api/requests/${q.requestId}/settle`).set(bearer("operator")).set("Idempotency-Key","terminal").send(pre.body).expect(200);await request(app).post(`/api/requests/${q.requestId}/settlement-preflight`).set(bearer("operator")).send({}).expect(409);expect(stripe.calls.transfer).toBe(1)});
+  it("fails closed at deposit finalization when fee policy selection is empty",async()=>{const{app,stripe,repository}=setup();const q=await quoted(app,10_000);repository.inspect(s=>s.feePolicies).splice(0);const dep=await request(app).post(`/api/requests/${q.requestId}/deposit`).set(bearer("customer")).set("Idempotency-Key","dep-policy").send({quoteId:q.quoteId}).expect(202);stripe.requestId=q.requestId;stripe.objectId=dep.body.providerReference;await request(app).post("/api/webhooks/stripe").set("stripe-signature","valid").set("Content-Type","application/json").send(Buffer.from("{}")).expect(500)});
+  it("allocates refunds across customer charges and never refunds a provider transfer",async()=>{let clock=new Date("2026-09-01T00:00:00Z");const{app,stripe,repository}=setup(()=>clock);const q=await completedAndCaptured(app,stripe,10_000);clock=new Date("2026-09-04T00:00:00Z");await settle(app,q.requestId);await request(app).post(`/api/requests/${q.requestId}/reviews`).set(bearer("customer")).send({rating:5,text:"Excellent completed repair"}).expect(201);await request(app).post(`/api/requests/${q.requestId}/refunds`).set(bearer("operator")).set("Idempotency-Key","refund").send({amountCents:2500,reason:"합의 환불"}).expect(201);expect(stripe.calls.refund).toBe(2);expect(repository.inspect(s=>s.payments.filter(p=>p.kind==="refund").map(p=>p.amountCents))).toEqual([2000,500]);expect(repository.inspect(s=>s.payments.find(p=>p.kind==="transfer")?.amountCents)).toBe(9000)});
+  it("ingests every dispute event and recovers a won reversal with a new-version transfer",async()=>{let clock=new Date("2026-09-01T00:00:00Z");const{app,stripe,repository}=setup(()=>clock);const q=await completedAndCaptured(app,stripe,10_000);clock=new Date("2026-09-04T00:00:00Z");await settle(app,q.requestId);stripe.requestId=q.requestId;stripe.objectId="dp_1";stripe.amount=3000;for(const [eventId,eventType,status] of [["evt_a","charge.dispute.created","needs_response"],["evt_b","charge.dispute.updated","under_review"],["evt_c","charge.dispute.closed","won"]]){stripe.eventId=eventId;stripe.eventType=eventType;stripe.disputeStatus=status;await request(app).post("/api/webhooks/stripe").set("stripe-signature","valid").set("Content-Type","application/json").send(Buffer.from(`{"id":"${eventId}"}`)).expect(201)}expect(Object.keys(repository.inspect(s=>s.webhookEvents))).toHaveLength(3);expect(stripe.calls.reverse).toBe(1);expect(repository.inspect(s=>Object.values(s.disputes)[0].status)).toBe("won");expect(repository.inspect(s=>s.jobs[q.requestId].settlementState)).toBe("reconciliation_required");clock=new Date("2026-09-04T00:10:00Z");const result=await reconcilePayments(repository,stripe,clock);expect(result.completed).toBe(1);expect(repository.inspect(s=>s.jobs[q.requestId].settlementState)).toBe("settled")});
+  it("marks transferring disputes for reconciliation and recovers them after the transfer barrier",async()=>{let clock=new Date("2026-09-01T00:00:00Z");const{app,stripe,repository}=setup(()=>clock);const q=await completedAndCaptured(app,stripe,10_000);clock=new Date("2026-09-04T00:00:00Z");const pre=await request(app).post(`/api/requests/${q.requestId}/settlement-preflight`).set(bearer("operator")).send({}).expect(200);stripe.releaseTransfer=()=>{};const pending=request(app).post(`/api/requests/${q.requestId}/settle`).set(bearer("operator")).set("Idempotency-Key","race").send(pre.body).then(v=>v);await new Promise(resolve=>setTimeout(resolve,10));stripe.requestId=q.requestId;stripe.objectId="dp_race";stripe.eventId="evt_race";stripe.eventType="charge.dispute.created";stripe.amount=3000;await request(app).post("/api/webhooks/stripe").set("stripe-signature","valid").set("Content-Type","application/json").send(Buffer.from("{}"));expect(repository.inspect(s=>s.jobs[q.requestId].settlementState)).toBe("reconciliation_required");stripe.releaseTransfer!();await pending;expect(repository.inspect(s=>s.jobs[q.requestId].settlementState)).toBe("reconciliation_required");clock=new Date("2026-09-04T00:10:00Z");const summary=await reconcilePayments(repository,stripe,clock);expect(summary.inspected).toBeGreaterThanOrEqual(1);expect(summary).toMatchObject({completed:1,failed:0});expect(stripe.calls.reverse).toBe(1);expect(repository.inspect(s=>s.jobs[q.requestId].settlementState)).toBe("manual_action")});
+});
 
-  it('issues organization-scoped role sessions and denies cross-role access', async () => {
-    const homeowner = request.agent(createApp(store, { auth: roleAuth }))
-    await homeowner.post('/api/session').send({ accessCode: 'home-code' }).expect(400, { error: 'email_required' })
-    const login = await homeowner.post('/api/session').send({ email: 'HOME@example.com', accessCode: 'home-code' }).expect(200)
-    expect(login.body.session).toMatchObject({
-      id: 'home-1', organizationId: 'household-1', role: 'homeowner', email: 'home@example.com',
-    })
-    const session = await homeowner.get('/api/session').expect(200)
-    expect(session.body.session).toMatchObject({ organizationId: 'household-1', role: 'homeowner' })
-    await homeowner.get('/api/homeowner/health').expect(200, { role: 'homeowner' })
-    await homeowner.get('/api/provider/health').expect(403, { error: 'insufficient_role' })
-    await homeowner.get('/api/admin/health').expect(403, { error: 'insufficient_role' })
 
-    const provider = request.agent(createApp(store, { auth: roleAuth }))
-    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
-    await provider.get('/api/provider/health').expect(200, { role: 'provider' })
-    await provider.get('/api/homeowner/health').expect(403, { error: 'insufficient_role' })
-  })
+describe("Supabase repository money contract",()=>{
+  it("uses real RPCs when configured and otherwise emits an explicit integration diagnostic",async()=>{
+    const url=process.env.SUPABASE_TEST_URL,anon=process.env.SUPABASE_TEST_ANON_KEY,service=process.env.SUPABASE_TEST_SERVICE_ROLE_KEY;
+    if(!url||!anon||!service){if(process.env.REQUIRE_SUPABASE_INTEGRATION==="1")throw new Error("required Supabase integration environment is absent");expect(process.env.REQUIRE_SUPABASE_INTEGRATION).not.toBe("1");return;}
+    const repository=new SupabaseRepository(url,anon,service);
+    const claims=await repository.stuckMoneyClaims(new Date(0).toISOString());
+    expect(Array.isArray(claims)).toBe(true);
+    const recovery=await repository.completeMoney("recovery","00000000-0000-0000-0000-000000000000",undefined,{actor:actors.operator,accessToken:"",now:new Date().toISOString()});
+    expect(recovery.status).toBe(409);
+    expect(JSON.stringify(recovery.data)).not.toMatch(/function .* does not exist|schema cache/i);
+    await expect(repository.dashboard(actors.customer,"invalid-integration-token")).rejects.toBeTruthy();
+  });
+});
 
-  it('isolates homeowner cases by organization while allowing admin review', async () => {
-    const app = createApp(store, { auth: roleAuth })
-    const owner = request.agent(app)
-    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
-    const created = await owner.post('/api/cases').send(validCase).expect(201)
-    expect(created.body.case.ownerOrganizationId).toBe('household-1')
+describe("P0 backend contracts",()=>{
+  it("persists structured surfaces, hides low-sample price, and blocks hazards",async()=>{const{app}=setup();const q=await quoted(app);const payload={workScope:{symptom:"Leaking trap",location:"Kitchen sink",dimensions:"1.5 inch",access:"open",desiredTime:"2026-09-08T00:00:00.000Z",photos:[],exclusions:["cabinet"]},triage:{category:"plumbing",urgency:"routine",possibleCauses:["loose trap"],confidence:.8,questions:["When?"],hazards:[]},priceDisclosure:{source:"regional",sampleCount:12,updatedAt:"2026-09-05T00:00:00.000Z",confidence:.5,priceCents:10000}};const saved=await request(app).post(`/api/requests/${q.requestId}/details`).set(bearer("customer")).send(payload).expect(200);expect(saved.body.priceDisclosure.priceCents).toBeUndefined();await request(app).post(`/api/requests/${q.requestId}/details`).set(bearer("customer")).send(payload).expect(409);const q2=await quoted(app);await request(app).post(`/api/requests/${q2.requestId}/details`).set(bearer("customer")).send({...payload,triage:{...payload.triage,hazards:["gas"]}}).expect(400)});
+  it("validates privacy, scope disclosure, provider slots, evidence, messaging, and scheduling",async()=>{const{app,stripe}=setup();await request(app).post("/api/privacy/deletion").set(bearer("customer")).send({}).expect(409);await request(app).post("/api/privacy/consent").set(bearer("customer")).send({version:"2026-09",accepted:true}).expect(201);const q=await quoted(app);await request(app).post(`/api/requests/${q.requestId}/provider-slot`).set(bearer("operator")).send({providerId:"provider-new"}).expect(201);await request(app).post(`/api/requests/${q.requestId}/details`).set(bearer("customer")).send({workScope:"Replace leaking kitchen drain",triage:{urgency:"routine",occupied:true,utilitiesShutoffKnown:true},priceDisclosureAccepted:true}).expect(200);const dep=await request(app).post(`/api/requests/${q.requestId}/deposit`).set(bearer("customer")).set("Idempotency-Key","p0-dep").send({quoteId:q.quoteId}).expect(202);await confirm(app,stripe,q.requestId,dep.body.providerReference,"evt-p0-dep");await request(app).post(`/api/requests/${q.requestId}/start`).set(bearer("provider")).send({}).expect(200);for(const kind of["receipt","warranty"])await request(app).post(`/api/requests/${q.requestId}/evidence`).set(bearer("provider")).send({kind,note:`${kind} evidence`}).expect(201);await request(app).post(`/api/requests/${q.requestId}/messages`).set(bearer("provider")).send({text:"Arrival window confirmed"}).expect(201);await request(app).put(`/api/requests/${q.requestId}/schedule`).set(bearer("customer")).send({startsAt:"2026-09-05T14:00:00.000Z",timeZone:"America/New_York",status:"confirmed"}).expect(200);await request(app).post("/api/privacy/deletion").set(bearer("customer")).send({}).expect(202)});
+  it("rejects incomplete P0 payloads and retired media routes",async()=>{const{app}=setup();const q=await quoted(app);await request(app).post(`/api/requests/${q.requestId}/details`).set(bearer("customer")).send({workScope:"short",priceDisclosureAccepted:false}).expect(400);await request(app).post(`/api/requests/${q.requestId}/media`).set(bearer("customer")).send({}).expect(404);await request(app).post("/api/media/retired/upload-url").set(bearer("customer")).send({}).expect(404);await request(app).post("/api/media/retired/complete").set(bearer("customer")).send({}).expect(404);await request(app).patch("/api/media/retired/sanitization").set(bearer("operator")).send({}).expect(404);await request(app).post(`/api/requests/${q.requestId}/changes`).set(bearer("provider")).send({description:"extra",amountCents:100}).expect(400)});
+  it("has one prefixed production money RPC surface with RLS, limits, webhook and recovery grants",()=>{const sql=readFileSync("supabase/migrations/0001_mvp.sql","utf8");expect(sql).not.toContain("113608");for(const tag of["$$","$won_recovery$","$provider_key$","$booking_fee$","$settlement_preflight$","$recovery_complete$","$recovery_fail$"])expect(sql.split(tag).length%2).toBe(1);expect(sql.match(/create function settlement_claim\(/g)).toHaveLength(1);expect(sql).not.toContain("deposit_succeeded_claim");expect(sql).toMatch(/create function recovery_complete\(p_claim_id uuid,p_provider_reference text,p_detail jsonb\)/);expect(sql).toMatch(/grant execute on function [^;]*recovery_complete\(uuid,text,jsonb\),recovery_fail\(uuid,text\) to service_role/);expect(sql).toMatch(/provider_idempotency_key text unique/);expect(sql).toMatch(/amount_cents between 0 and 99999999/);expect(sql).toMatch(/quotes_one_per_provider_request/);expect(sql).toMatch(/force row level security/);expect(sql).toMatch(/stripe_webhook_events/);expect(sql).toMatch(/jobs_snapshot_booking_fee/)});
+  it("uses p-prefixed parameters and v-prefixed non-column locals in every reachable money RPC",()=>{const sql=readFileSync("supabase/migrations/0001_mvp.sql","utf8");const names=["customer_payment_complete","payment_succeeded_claim","payment_succeeded_complete","settlement_complete","refund_claim","refund_complete","external_dispute_claim","external_dispute_complete","recovery_complete"];for(const name of names){const start=sql.indexOf(`function ${name}(`),end=sql.indexOf("end;",start),definition=sql.slice(start,end),parameters=definition.slice(definition.indexOf("(")+1,definition.indexOf(")")).split(","),declarations=definition.match(/\bdeclare\s+([\s\S]*?)\bbegin\b/)?.[1]??"";expect(start,`${name} exists`).toBeGreaterThanOrEqual(0);expect(parameters.every(parameter=>parameter.trim().startsWith("p_")),`${name} parameters`).toBe(true);expect(declarations,`${name} locals`).not.toMatch(/(?:^|;)\s*(?!v_)[a-z][a-z0-9_]*\s+/i);expect(declarations,`${name} column-named locals`).not.toMatch(/(?:^|;)\s*(id|request_id|provider_reference|event_id|state|kind|amount_cents)\s+/i)}});
+  it("opens internal disputes through a definer RPC with qualified atomic hold invalidation",()=>{const sql=readFileSync("supabase/migrations/0001_mvp.sql","utf8");const start=sql.indexOf("function open_internal_dispute("),end=sql.indexOf("end; $$;",start),definition=sql.slice(start,end);expect(definition).toMatch(/security definer/);expect(definition).toMatch(/declare v_result disputes; v_completed_at timestamptz; v_now timestamptz/);expect(definition).not.toMatch(/declare[^;]*\b(result|request_id|source|reason|completed)\b/);expect(definition).toMatch(/r\.customer_id=auth\.uid\(\)/);expect(definition).toMatch(/v_now<v_completed_at or v_now>=v_completed_at\+interval '72 hours'/);expect(definition).toMatch(/set dispute_status='open',authorization_version=j\.authorization_version\+1,authorization_token=null/);expect(definition).toMatch(/delete from settlement_authorizations sa where sa\.request_id=p_request_id/);});
+});
 
-    const other = request.agent(app)
-    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
-    await other.get(`/api/cases/${created.body.case.id}`).expect(404, { error: 'case_not_found' })
 
-    const admin = request.agent(app)
-    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
-    await admin.get(`/api/cases/${created.body.case.id}`).expect(200)
-  })
-
-  it('isolates maintenance memberships by homeowner organization', async () => {
-    const app = createApp(store, { auth: roleAuth, maintenance })
-    const owner = request.agent(app)
-    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
-    const created = await owner.post('/api/maintenance/memberships').send({
-      technicianName: 'Jordan Lee',
-      technicianPhone: '+17045550199',
-      customerName: 'Home Owner',
-      propertyAddress: '1200 South Blvd, Charlotte, NC',
-      terms: charlottePilotTerms,
-      compliance: {
-        jurisdiction: 'NC',
-        legalMode: 'scheduled_maintenance',
-        contractorLicenseVerified: true,
-        serviceContractRegistrationVerified: false,
-      },
-      initialRepairCreditCents: 0,
-    }).expect(201)
-    expect(created.body.membership.ownerOrganizationId).toBe('household-1')
-
-    const other = request.agent(app)
-    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
-    await other.get(`/api/maintenance/memberships/${created.body.membership.id}`).expect(404, { error: 'membership_not_found' })
-
-    const admin = request.agent(app)
-    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
-    await admin.get(`/api/maintenance/memberships/${created.body.membership.id}`).expect(200)
-  })
-
-  it('onboards a Charlotte property and creates conflict-safe homeowner bookings', async () => {
-    const app = createApp(store, { auth: roleAuth, platform })
-    const owner = request.agent(app)
-    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
-    await owner.post('/api/homeowner/properties').send({
-      customerName: 'Home Owner', addressLine1: '1 Main St', city: 'Fort Mill',
-      state: 'SC', county: 'York', postalCode: '29715',
-    }).expect(400, {
-      error: 'property_outside_service_area',
-      issues: ['SC is not supported during the Charlotte pilot', 'Service is currently limited to Mecklenburg County', 'Postal code is outside the Charlotte pilot area'],
-    })
-    const created = await owner.post('/api/homeowner/properties').send({
-      customerName: 'Home Owner', addressLine1: '1200 South Blvd', city: 'Charlotte',
-      state: 'nc', county: 'Mecklenburg', postalCode: '28210',
-    }).expect(201)
-    const propertyId = created.body.property.id
-    const bookingInput = {
-      propertyId,
-      service: 'recurring_cleaning',
-      preferredStart: '2026-09-01T14:00:00.000Z',
-      symptomSummary: 'Biweekly cleaning',
-      safetyStop: false,
-      cleaningScope: { squareFeet: 2200, bathrooms: 2, frequency: 'biweekly', deepClean: false, pets: true },
-    }
-    const booking = await owner.post('/api/homeowner/bookings').send(bookingInput).expect(201)
-    expect(booking.body.booking).toMatchObject({
-      status: 'requested', estimateLowCents: 15400, estimateHighCents: 21700,
-    })
-    await owner.post('/api/homeowner/bookings').send(bookingInput).expect(409, { error: 'booking_slot_conflict' })
-    const safetyBooking = await owner.post('/api/homeowner/bookings').send({
-      ...bookingInput,
-      service: 'hvac_service',
-      preferredStart: '2026-09-03T14:00:00.000Z',
-      symptomSummary: 'Burning odor and repeated breaker trip',
-      safetyStop: true,
-      cleaningScope: undefined,
-    }).expect(201)
-    expect(safetyBooking.body.booking).toMatchObject({
-      status: 'human_review', safetyStop: true, estimateLowCents: null, estimateHighCents: null,
-    })
-    const dispute = await owner.post('/api/homeowner/disputes').send({
-      bookingId: booking.body.booking.id, category: 'quality', summary: 'Return visit requested',
-    }).expect(201)
-
-    const other = request.agent(app)
-    await other.post('/api/session').send({ email: 'other@example.com', accessCode: 'other-code' }).expect(200)
-    await other.post('/api/homeowner/bookings').send({ ...bookingInput, preferredStart: '2026-09-02T14:00:00.000Z' })
-      .expect(404, { error: 'property_not_found' })
-
-    const admin = request.agent(app)
-    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
-    await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
-      .send({ providerId: 'provider-1', providerOrganizationId: 'provider-org', safetyReviewed: false })
-      .expect(409, { error: 'safety_review_required' })
-    await admin.post(`/api/admin/bookings/${safetyBooking.body.booking.id}/dispatch`)
-      .send({ providerId: 'provider-1', providerOrganizationId: 'provider-org', safetyReviewed: true }).expect(200)
-    const provider = request.agent(app)
-    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
-    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/accept`).send({}).expect(200)
-    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/schedule`)
-      .send({ scheduledAt: '2026-09-03T15:00:00.000Z' }).expect(200)
-    await provider.post(`/api/provider/service-bookings/${safetyBooking.body.booking.id}/complete`).send({
-      finalOutcome: {
-        technicianConfirmedIssue: 'Failed blower capacitor',
-        parts: ['45/5 capacitor'],
-        laborMinutes: 55,
-        finalPriceCents: 32900,
-        outcome: 'resolved',
-        aiAssessmentOutcome: 'corrected',
-      },
-    }).expect(200)
-    expect((await provider.get('/api/provider/work-orders').expect(200)).body.earnings)
-      .toEqual({ completedJobs: 1, grossRevenueCents: 32900 })
-    await admin.post('/api/admin/provider-controls').send({
-      organizationId: 'provider-org', status: 'suspended', licenseExpiresAt: null,
-      insuranceExpiresAt: null, reason: 'Insurance verification expired',
-    }).expect(200)
-    await admin.post(`/api/admin/disputes/${dispute.body.dispute.id}/investigating`).send({}).expect(200)
-    await admin.post(`/api/admin/disputes/${dispute.body.dispute.id}/resolved`)
-      .send({ resolution: 'No-charge return visit assigned' }).expect(200)
-    const operations = await admin.get('/api/admin/operations').expect(200)
-    expect(operations.body).toMatchObject({
-      queues: { safetyReview: 0, unassigned: 1 },
-      providerControls: [expect.objectContaining({ organizationId: 'provider-org', status: 'suspended' })],
-    })
-    expect(operations.body.auditLogs.map((entry: { action: string }) => entry.action))
-      .toEqual(expect.arrayContaining(['booking.dispatched', 'provider.suspended', 'dispute.resolved']))
-    const integrations = await admin.get('/api/admin/integrations').expect(200)
-    expect(integrations.body.integrations.payments).toEqual({ configured: false, humanActionRequired: true })
-  })
-
-  it('keeps provider pricebooks and availability inside the provider organization', async () => {
-    const app = createApp(store, { auth: roleAuth, platform, maintenance })
-    const provider = request.agent(app)
-    await provider.post('/api/session').send({ email: 'pro@example.com', accessCode: 'pro-code' }).expect(200)
-    await provider.post('/api/provider/pricebook').send({
-      service: 'hvac_service', label: 'Diagnostic visit', baseFeeCents: 8900,
-      laborLowCents: 9000, laborHighCents: 29000, active: true,
-    }).expect(201)
-    await provider.post('/api/provider/availability').send({
-      weekday: 1, startTime: '08:00', endTime: '17:00', urgent: true,
-    }).expect(201)
-    await provider.post('/api/provider/availability').send({
-      weekday: 1, startTime: '08:00', endTime: '17:00', urgent: true,
-    }).expect(409, { error: 'availability_conflict' })
-    expect((await provider.get('/api/provider/pricebook').expect(200)).body.items).toHaveLength(1)
-    expect((await provider.get('/api/provider/availability').expect(200)).body.availability).toHaveLength(1)
-    expect((await provider.get('/api/provider/work-orders').expect(200)).body.earnings)
-      .toEqual({ completedJobs: 0, grossRevenueCents: 0 })
-
-    const owner = request.agent(app)
-    await owner.post('/api/session').send({ email: 'home@example.com', accessCode: 'home-code' }).expect(200)
-    await owner.get('/api/provider/pricebook').expect(403, { error: 'insufficient_role' })
-  })
-
-  it('lets admins provision persistent users without exposing access codes', async () => {
-    const authWithIdentity: AuthConfig = {
-      ...roleAuth,
-      authenticate: (email, accessCode) => identity.authenticate(email, accessCode),
-    }
-    const app = createApp(store, { auth: authWithIdentity, identity, platform })
-    const admin = request.agent(app)
-    await admin.post('/api/session').send({ email: 'admin@example.com', accessCode: 'admin-code' }).expect(200)
-    const created = await admin.post('/api/admin/users').send({
-      organizationId: 'new-household', email: 'newhome@example.com', displayName: 'New Homeowner',
-      role: 'homeowner', accessCode: 'new-home-code',
-    }).expect(201)
-    expect(created.body.user).toMatchObject({ organizationId: 'new-household', role: 'homeowner', active: true })
-    expect(JSON.stringify(created.body)).not.toContain('new-home-code')
-    expect((await admin.get('/api/admin/users').expect(200)).body.users).toHaveLength(1)
-
-    const homeowner = request.agent(app)
-    await homeowner.post('/api/session').send({ email: 'newhome@example.com', accessCode: 'new-home-code' }).expect(200)
-    await homeowner.get('/api/homeowner/health').expect(200, { role: 'homeowner' })
-    await admin.post(`/api/admin/users/${created.body.user.id}/active`).send({ active: false }).expect(200)
-    const disabled = request.agent(app)
-    await disabled.post('/api/session').send({ email: 'newhome@example.com', accessCode: 'new-home-code' }).expect(401)
-  })
-})
-
-describe('jurisdiction API', () => {
-  it('publishes the Charlotte boundary and blocks South Carolina memberships', async () => {
-    const publicProfile = await request(createApp(store)).get('/api/jurisdiction').expect(200)
-    expect(publicProfile.body).toMatchObject({
-      id: 'us-nc-mecklenburg',
-      state: 'NC',
-      county: 'Mecklenburg',
-      blockedStates: ['SC'],
-      launchLegalMode: 'scheduled_maintenance',
-    })
-
-    const app = await authenticatedAgent({ maintenance })
-    const rejected = await app.post('/api/maintenance/memberships').send({
-      technicianName: 'Jordan Lee',
-      technicianPhone: '+17045550199',
-      customerName: 'Taylor Home',
-      propertyAddress: '100 Main St, Fort Mill, SC',
-      terms: charlottePilotTerms,
-      compliance: {
-        jurisdiction: 'SC',
-        legalMode: 'scheduled_maintenance',
-        contractorLicenseVerified: true,
-        serviceContractRegistrationVerified: false,
-      },
-      initialRepairCreditCents: 0,
-    }).expect(400)
-    expect(rejected.body.issues.map((issue: { message: string }) => issue.message))
-      .toContain('SC is not supported during the Charlotte pilot')
-  })
-})
-
-describe('case API', () => {
-  it('persists and retrieves a validated case with its estimate', async () => {
-    const app = await authenticatedAgent()
-    const created = await app.post('/api/cases').send(validCase).expect(201)
-    expect(created.body.estimate).toMatchObject({ confidence: 72, canBook: true })
-    const fetched = await app.get(`/api/cases/${created.body.case.id}`).expect(200)
-    expect(fetched.body.case).toMatchObject({ customerName: 'Alex Morgan', summary: validCase.summary })
-  })
-
-  it('rejects malformed contact details and blocks safety-sensitive booking', async () => {
-    const app = await authenticatedAgent()
-    await app.post('/api/cases').send({ ...validCase, phone: '123', consentToText: false }).expect(400)
-    const response = await app.post('/api/cases').send({ ...validCase, summary: 'Gas odor near the heater' }).expect(201)
-    expect(response.body.estimate).toMatchObject({ safetyEscalation: true, canBook: false, low: 0, high: 0 })
-  })
-
-  it('returns a stable not-found error', async () => {
-    const app = await authenticatedAgent()
-    await app.get('/api/cases/missing').expect(404, { error: 'case_not_found' })
-  })
-
-  it('stores and serves safe evidence with integrity metadata', async () => {
-    const app = await authenticatedAgent({ evidenceStorage })
-    const created = await app.post('/api/cases').send(validCase).expect(201)
-    const uploaded = await app.post(`/api/cases/${created.body.case.id}/evidence`)
-      .attach('evidence', Buffer.from('valid-image-bytes'), { filename: 'leak.jpg', contentType: 'image/jpeg' }).expect(201)
-    expect(uploaded.body.asset).toMatchObject({ originalName: 'leak.jpg', mediaType: 'image/jpeg', byteSize: 17 })
-    expect(uploaded.body.asset.sha256).toMatch(/^[a-f0-9]{64}$/)
-
-    const content = await app.get(`/api/cases/${created.body.case.id}/evidence/${uploaded.body.asset.id}`).expect(200)
-    expect(content.headers['x-content-type-options']).toBe('nosniff')
-    expect(content.headers['cache-control']).toBe('private, no-store')
-    expect(content.body).toEqual(Buffer.from('valid-image-bytes'))
-  })
-
-  it('rejects unsupported and empty evidence', async () => {
-    const app = await authenticatedAgent({ evidenceStorage })
-    const created = await app.post('/api/cases').send(validCase).expect(201)
-    await app.post(`/api/cases/${created.body.case.id}/evidence`)
-      .attach('evidence', Buffer.from('script'), { filename: 'payload.svg', contentType: 'image/svg+xml' })
-      .expect(400, { error: 'invalid_evidence' })
-    await app.post(`/api/cases/${created.body.case.id}/evidence`).expect(400, { error: 'evidence_required' })
-  })
-
-  it('runs configured multimodal analysis and fails closed without it', async () => {
-    const base = await authenticatedAgent()
-    const created = await base.post('/api/cases').send(validCase).expect(201)
-    await base.post(`/api/cases/${created.body.case.id}/evidence/analyze`)
-      .attach('evidence', Buffer.from('image'), { filename: 'leak.jpg', contentType: 'image/jpeg' })
-      .expect(503, { error: 'multimodal_not_configured' })
-
-    const multimodal = async () => ({ observations: ['Visible moisture near a drain joint'], possibleCauses: [], missingEvidence: ['Meter movement test'], safetyConcern: false, safetyReason: '' })
-    const configured = await authenticatedAgent({ multimodal })
-    const analyzed = await configured.post(`/api/cases/${created.body.case.id}/evidence/analyze`)
-      .attach('evidence', Buffer.from('image'), { filename: 'leak.jpg', contentType: 'image/jpeg' }).expect(200)
-    expect(analyzed.body.analysis.observations).toEqual(['Visible moisture near a drain joint'])
-    expect(analyzed.body.analysis.mediaSource).toBe('original_image')
-    await configured.post(`/api/cases/${created.body.case.id}/evidence/analyze`)
-      .attach('evidence', Buffer.from('not-a-video'), { filename: 'leak.mp4', contentType: 'video/mp4' })
-      .expect(422, { error: 'video_frame_extraction_failed' })
-  })
-})
-
-describe('call turn API', () => {
-  it('returns disclosure actions and escalates danger input', async () => {
-    const app = await authenticatedAgent()
-    const initial = await app.post('/api/calls/next').send({}).expect(200)
-    expect(initial.body.actions[0].text).toContain('AI assistant')
-    const consented = await app.post('/api/calls/next').send({ context: initial.body.context, input: 'yes' }).expect(200)
-    const danger = await app.post('/api/calls/next').send({ context: consented.body.context, input: 'There is smoke and sparking by the unit' }).expect(200)
-    expect(danger.body.context).toMatchObject({ dangerDetected: true, stage: 'handoff' })
-    expect(danger.body.actions.at(-1)).toEqual({ type: 'handoff', reason: 'danger' })
-  })
-})
-
-describe('diagnostic protocol API', () => {
-  it('returns source-linked protocols and blocks safety-sensitive inference', async () => {
-    const app = await authenticatedAgent()
-    const catalog = await app.get('/api/diagnostic-protocols').expect(200)
-    expect(catalog.body.protocols).toHaveLength(5)
-    expect(catalog.body.protocols.every((item: { sources: unknown[] }) => item.sources.length > 0)).toBe(true)
-
-    const evaluated = await app.post('/api/diagnostic-protocols/evaluate').send({
-      protocolId: 'breaker_trip',
-      answers: { repeat_trip: true, heat_or_odor: false, what_running: 'dryer' },
-      observedEvidenceIds: ['panel_exterior'],
-    }).expect(200)
-    expect(evaluated.body.evaluation).toMatchObject({ safetyStop: true, hypotheses: [] })
-  })
-})
-
-describe('maintenance membership API', () => {
-  it('assigns a technician, records a visit, and quotes a member repair', async () => {
-    const app = await authenticatedAgent({ maintenance })
-    const created = await app.post('/api/maintenance/memberships').send({
-      technicianName: 'Jordan Lee',
-      technicianPhone: '+15125550199',
-      customerName: 'Taylor Home',
-      propertyAddress: '1200 South Blvd, Charlotte, NC',
-      terms: charlottePilotTerms,
-      compliance: {
-        jurisdiction: 'NC',
-        legalMode: 'scheduled_maintenance',
-        contractorLicenseVerified: true,
-        serviceContractRegistrationVerified: false,
-      },
-      initialRepairCreditCents: 0,
-    }).expect(201)
-    const id = created.body.membership.id
-    const visit = await app.post(`/api/maintenance/memberships/${id}/visits`).send({
-      notes: 'Monthly plumbing inspection complete',
-      completedAt: '2026-08-26T03:00:00.000Z',
-    }).expect(201)
-    expect(visit.body.visit.remainingIncludedVisits).toBe(1)
-
-    const quote = await app.post(`/api/maintenance/memberships/${id}/repair-quotes`).send({
-      laborCents: 20000,
-      partsCents: 10000,
-    }).expect(201)
-    expect(quote.body.quote.price).toMatchObject({ retailCents: 30000, memberDueCents: 30000 })
-  })
-
-  it('serves a Home Passport export and requires explicit deletion confirmation', async () => {
-    const app = await authenticatedAgent({ maintenance })
-    const created = await app.post('/api/maintenance/memberships').send({
-      technicianName: 'Jordan Lee',
-      technicianPhone: '+15125550199',
-      customerName: 'Taylor Home',
-      propertyAddress: '1200 South Blvd, Charlotte, NC',
-      terms: charlottePilotTerms,
-      compliance: {
-        jurisdiction: 'NC',
-        legalMode: 'scheduled_maintenance',
-        contractorLicenseVerified: true,
-        serviceContractRegistrationVerified: false,
-      },
-      initialRepairCreditCents: 0,
-    }).expect(201)
-    const id = created.body.membership.id
-    await app.post(`/api/maintenance/memberships/${id}/assets`).send({
-      category: 'hvac',
-      label: 'Main HVAC',
-      installedYear: 2014,
-      expectedLifeYears: 15,
-      serviceIntervalMonths: 12,
-      lastServicedAt: null,
-      condition: 'watch',
-    }).expect(201)
-    const passport = await app.get(`/api/maintenance/memberships/${id}/passport`).expect(200)
-    expect(passport.body.passport.prioritizedActions).toHaveLength(1)
-    const exported = await app.get(`/api/maintenance/memberships/${id}/export`).expect(200)
-    expect(exported.headers['content-disposition']).toContain('attachment')
-    await app.delete(`/api/maintenance/memberships/${id}`).send({ confirmation: 'wrong' }).expect(400)
-    await app.delete(`/api/maintenance/memberships/${id}`).send({ confirmation: id }).expect(204)
-    await app.get(`/api/maintenance/memberships/${id}/passport`).expect(404)
-  })
-
-  it('runs the threshold lifecycle and blocks pricing while safety is unresolved', async () => {
-    const app = await authenticatedAgent({ maintenance })
-    const created = await app.post('/api/maintenance/memberships').send({
-      technicianName: 'Jordan Lee',
-      technicianPhone: '+17045550199',
-      customerName: 'Taylor Home',
-      propertyAddress: '1200 South Blvd, Charlotte, NC',
-      terms: charlottePilotTerms,
-      compliance: {
-        jurisdiction: 'NC',
-        legalMode: 'scheduled_maintenance',
-        contractorLicenseVerified: true,
-        serviceContractRegistrationVerified: false,
-      },
-      initialRepairCreditCents: 0,
-    }).expect(201)
-    const membershipId = created.body.membership.id
-    const assignedProvider = await app.post('/api/maintenance/providers').send({
-      ownerOrganizationId: 'provider-org',
-      name: 'Assigned HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
-      licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
-    }).expect(201)
-    const backupProvider = await app.post('/api/maintenance/providers').send({
-      ownerOrganizationId: 'backup-org',
-      name: 'Backup HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
-      licenseVerified: true, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
-    }).expect(201)
-    await app.post(`/api/maintenance/memberships/${membershipId}/team/${assignedProvider.body.provider.id}`)
-      .send({ relationship: 'assigned' }).expect(200)
-    await app.post(`/api/maintenance/memberships/${membershipId}/team/${backupProvider.body.provider.id}`)
-      .send({ relationship: 'backup' }).expect(200)
-    const matched = await app.post(`/api/maintenance/memberships/${membershipId}/match-providers`).send({
-      service: 'hvac_service', postalCode: '28210', urgent: true, safetyStop: false,
-    }).expect(200)
-    expect(matched.body.matches.map((match: { relationship: string }) => match.relationship)).toEqual(['assigned', 'backup'])
-    const workOrder = await app.post(`/api/maintenance/memberships/${membershipId}/work-orders`).send({
-      providerId: assignedProvider.body.provider.id,
-      service: 'hvac_service',
-      summary: 'Cooling recovery is slower than the recorded baseline',
-    }).expect(201)
-    await app.post(`/api/maintenance/work-orders/${workOrder.body.workOrder.id}/accept`).send({}).expect(200)
-    await app.post(`/api/maintenance/work-orders/${workOrder.body.workOrder.id}/schedule`)
-      .send({ scheduledAt: '2026-09-01T14:00:00.000Z' }).expect(200)
-    await app.post(`/api/maintenance/work-orders/${workOrder.body.workOrder.id}/complete`).send({
-      finalOutcome: {
-        technicianConfirmedIssue: 'Restricted airflow from loaded filter',
-        parts: ['16x25 filter'],
-        laborMinutes: 40,
-        finalPriceCents: 17900,
-        outcome: 'resolved',
-        aiAssessmentOutcome: 'corrected',
-      },
-    }).expect(200)
-    const workOrders = await app.get(`/api/maintenance/memberships/${membershipId}/work-orders`).expect(200)
-    expect(workOrders.body.workOrders[0]).toMatchObject({
-      status: 'completed',
-      finalOutcome: { aiAssessmentOutcome: 'corrected', finalPriceCents: 17900 },
-    })
-    await app.post('/api/maintenance/providers').send({
-      name: 'Unlicensed HVAC', role: 'hvac_technician', trade: 'hvac', active: true,
-      licenseVerified: false, insured: true, postalCodePrefixes: ['282'], availableForUrgentDispatch: true,
-    }).expect(400)
-    const added = await app.post(`/api/maintenance/memberships/${membershipId}/assets`).send({
-      category: 'electrical',
-      label: 'Main panel',
-      installedYear: 2000,
-      expectedLifeYears: 25,
-      serviceIntervalMonths: 12,
-      lastServicedAt: '2024-01-01T00:00:00.000Z',
-      condition: 'watch',
-    }).expect(201)
-    const evaluated = await app.post(`/api/maintenance/memberships/${membershipId}/evaluate-thresholds`).send({
-      now: '2026-08-27T00:00:00.000Z',
-      safetyStopAssetId: added.body.asset.id,
-      safetyEvidence: ['breaker retripped'],
-    }).expect(200)
-    const safetyEvent = evaluated.body.created.find((event: { ruleId: string }) => event.ruleId === 'safety_stop')
-    expect(safetyEvent).toMatchObject({ severity: 'urgent', safetyStop: true, recommendedProtocolId: 'breaker_trip' })
-    await app.post(`/api/maintenance/memberships/${membershipId}/repair-quotes`)
-      .send({ laborCents: 10000, partsCents: 5000 })
-      .expect(409, { error: 'pricing_blocked_by_safety_event' })
-    await app.post(`/api/maintenance/events/${safetyEvent.id}/acknowledge`).expect(200)
-    await app.post(`/api/maintenance/events/${safetyEvent.id}/schedule`).expect(200)
-    await app.post(`/api/maintenance/events/${safetyEvent.id}/resolve`).expect(200)
-    await app.post(`/api/maintenance/events/${safetyEvent.id}/acknowledge`).expect(409)
-    await app.post(`/api/maintenance/memberships/${membershipId}/repair-quotes`)
-      .send({ laborCents: 10000, partsCents: 5000 })
-      .expect(201)
-    const listed = await app.get(`/api/maintenance/memberships/${membershipId}/events`).expect(200)
-    expect(listed.body.events.some((event: { id: string; status: string }) => event.id === safetyEvent.id && event.status === 'resolved')).toBe(true)
-  })
-})
+describe("P0 persisted ranking, read model, and audit",()=>{
+  it("persists a versioned multi-factor score instead of ordering by lowest price",async()=>{const{app}=setup();const q=await quoted(app,25_000);const dashboard=await request(app).get("/api/dashboard").set(bearer("customer")).expect(200);expect(dashboard.body.quotes[0]).toMatchObject({id:q.quoteId,rankingPolicyVersion:1});expect(dashboard.body.quotes[0].rankingScore).toBeGreaterThan(0);const created=dashboard.body.quotes[0];expect(compositeQuoteScore(created)).toBe(created.rankingScore);const expensive={...created,id:"better",amountCents:30_000,rankingScore:created.rankingScore+1};expect([created,expensive].sort((a,b)=>compositeQuoteScore(b)-compositeQuoteScore(a))[0].id).toBe("better")});
+  it("returns persisted P0 request surfaces after dashboard refresh with tenant scope",async()=>{const{app}=setup();await request(app).post("/api/privacy/consent").set(bearer("customer")).send({version:"2026-09",accepted:true}).expect(201);const q=await quoted(app);await request(app).post(`/api/requests/${q.requestId}/messages`).set(bearer("customer")).send({text:"Persist this message"}).expect(201);await request(app).put(`/api/requests/${q.requestId}/schedule`).set(bearer("customer")).send({startsAt:"2026-09-10T10:00:00.000Z",timeZone:"America/New_York",status:"confirmed"}).expect(200);const dashboard=await request(app).get("/api/dashboard").set(bearer("customer")).expect(200);expect(dashboard.body.media).toHaveLength(0);expect(dashboard.body.messages[0].text).toBe("Persist this message");expect(dashboard.body.schedules[0].status).toBe("confirmed");expect(dashboard.body.privacy.consents[0].consentVersion).toBe("2026-09");const other=await request(app).get("/api/dashboard").set(bearer("other")).expect(200);expect(other.body.media).toHaveLength(0);expect(other.body.messages).toHaveLength(0)});
+  it("records correlated rationale-bearing audits and defines atomic production audit triggers",async()=>{const{app,repository}=setup();const q=await quoted(app);const audits=repository.inspect(state=>state.audit.filter(event=>event.requestId===q.requestId));expect(audits.length).toBeGreaterThan(0);expect(audits.every(event=>event.actorId&&event.action&&event.resourceType&&event.resourceId&&event.rationale&&event.correlationId)).toBe(true);const sql=readFileSync("supabase/migrations/0001_mvp.sql","utf8");expect(sql).toMatch(/create table ranking_policies/);expect(sql).toMatch(/policy_version bigint not null references ranking_policies\(version\),score numeric not null/);for(const field of["resource_type text not null","resource_id text not null","rationale text not null","correlation_id text not null"])expect(sql).toContain(field);expect(sql).toMatch(/create function audit_domain_mutation\(\)/);expect(sql).toMatch(/create trigger audit_money_operations_mutation/);expect(sql).toMatch(/create trigger audit_request_media_mutation/)});
+});

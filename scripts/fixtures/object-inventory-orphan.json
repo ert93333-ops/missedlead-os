@@ -1,0 +1,11 @@
+{
+  "objects": [
+    {
+      "path": "fixture/customer/request/unclaimed-sanitized-object",
+      "lifecycle": "sanitized",
+      "visibility": "private",
+      "readable": true
+    }
+  ],
+  "records": []
+}

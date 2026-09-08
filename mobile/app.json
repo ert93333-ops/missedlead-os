@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "WeCover",
+    "slug": "wecover",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "wecover",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wecover.customer"
+    },
+    "android": {
+      "package": "com.wecover.customer",
+      "allowBackup": false
+    },
+    "extra": {
+      "paymentActivationSource": "authenticated-server-capability"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose repair photos or videos to share with WeCover. If denied, enable Photos in Settings and retry.",
+          "cameraPermission": "Take repair photos or videos for your consultation. If denied, enable Camera in Settings and retry.",
+          "microphonePermission": "Record sound with a repair video. If denied, enable Microphone in Settings and retry."
+        }
+      ],
+      "expo-secure-store",
+      "expo-document-picker",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": false
+        }
+      ]
+    ]
+  }
+}

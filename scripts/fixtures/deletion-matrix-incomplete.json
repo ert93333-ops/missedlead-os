@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "release_approved": false,
+  "completed_erasure_irreversible": true,
+  "backup_restore": {
+    "tombstone_replay_before_access": true,
+    "access_blocked_until_replay": true
+  },
+  "classes": [
+    {
+      "class": "Auth identity/session",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "profile/address/property",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "requests/details/messages/translations",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "intake media",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "provider evidence/documents",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "notifications",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "audit/logs",
+      "action": "policy_pending",
+      "reason": "Synthetic owner decision remains pending.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "restore_restricted_retained_only",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "financial/legal records",
+      "action": "policy_pending",
+      "reason": "Synthetic owner decision remains pending.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "restore_restricted_retained_only",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "caches",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "not_restorable",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "exports",
+      "action": "erase",
+      "reason": "Synthetic structural test row.",
+      "expiry": "upon_verified_deletion_completion",
+      "owner_decision_pending": false,
+      "legal_hold_behavior": "block_execution_and_escalate_to_owner",
+      "post_deletion_access": "none",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    },
+    {
+      "class": "backups",
+      "action": "policy_pending",
+      "reason": "Synthetic owner decision remains pending.",
+      "expiry": null,
+      "owner_decision_pending": true,
+      "legal_hold_behavior": "preserve_restricted_and_escalate_to_owner",
+      "post_deletion_access": "restricted_retained_only",
+      "restore_handling": "replay_tombstone_before_access",
+      "data_owner": "synthetic owner"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set search_path=public,extensions;
+select plan(12);
+insert into profiles(id,role,display_name) values
+ ('17000000-0000-0000-0000-000000000001','customer','Applicant'),
+ ('17000000-0000-0000-0000-000000000002','customer','Other owner');
+select set_config('request.jwt.claim.sub','17000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select lives_ok($$select save_provider_application('{"organizationName":"Test","contactName":"Owner","contactEmail":"test@example.com","contactPhone":"5551234567","categories":["plumbing"],"zipCodes":["28202"],"languages":["en"],"availability":"Weekdays","diagnosticFeeCents":1000,"licenseNumber":"TEST","licenseExpiresAt":"2099-01-01T00:00:00Z","insuranceExpiresAt":"2099-01-01T00:00:00Z","workersCompRequired":false}')$$,'owner can apply');
+select is((select role from profiles where id=auth.uid()),'customer','applying does not grant provider role');
+select throws_ok($$select review_provider_application(auth.uid(),'approved','checked','registry-test')$$,'42501','operator_required','customer cannot self approve');
+set local role authenticated;
+select is((select count(*) from provider_applications),1::bigint,'owner reads application');
+select throws_ok($$update provider_applications set status='approved' where provider_id=auth.uid()$$,'42501',null,'direct review mutation denied');
+select set_config('request.jwt.claim.sub','17000000-0000-0000-0000-000000000002',true);
+select is((select count(*) from provider_applications),0::bigint,'another customer cannot read applicant contact data');
+select throws_ok($$select submit_quote(gen_random_uuid(),'x','x',100,'{}')$$,'42501',null,'legacy quote API cannot bypass metadata');
+reset role;
+select throws_ok($$select submit_itemized_quote(gen_random_uuid(),'{"diagnosticCents":100,"laborCents":200,"materialsCents":0,"taxCents":10,"totalCents":300}')$$,'P0001','quote_total_invalid','mismatched sum rejected before any write');
+select throws_ok($$select submit_itemized_quote(gen_random_uuid(),'{"diagnosticCents":100,"laborCents":200,"materialsCents":0,"taxCents":10,"totalCents":310,"validUntil":"2000-01-01T00:00:00Z","earliestStartAt":"2099-01-01T00:00:00Z"}')$$,'P0001','quote_expired','expired quote rejected before any write');
+select is((select public from storage.buckets where id='provider-documents-private'),false,'tax and credential bucket is private');
+insert into profiles(id,role,display_name) values('17000000-0000-0000-0000-000000000003','operator','Reviewer');
+insert into operator_allowlist(user_id) values('17000000-0000-0000-0000-000000000003');
+select set_config('request.jwt.claim.sub','17000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select review_provider_application('17000000-0000-0000-0000-000000000001','approved','checked','registry-test')$$,'P0001','required_document_missing','approval requires actual uploaded documents');
+insert into provider_documents(provider_id,kind,file_name,object_path) select '17000000-0000-0000-0000-000000000001',kind,kind||'.pdf','nonexistent/'||kind from unnest(array['license','coi','w9']) kind;
+select throws_ok($$select review_provider_application('17000000-0000-0000-0000-000000000001','approved','checked','registry-test')$$,'P0001','required_document_missing','metadata without storage objects cannot pass approval');
+select * from finish();
+rollback;

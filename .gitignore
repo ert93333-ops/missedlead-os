@@ -10,9 +10,28 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+*.tsbuildinfo
 *.local
+.env
+.env.*
+!.env.example
 data/
 .gjc/
+mobile/.expo/
+supabase/.temp/start-secrets/
+
+# Local reports, generated bundles, and tool state
+artifacts/
+log/
+test-results/
+playwright-report/
+coverage/
+mobile/dist-web/
+mobile/dist-release-check/
+supabase/.temp/
+supabase/.branches/
+.codegraph/
+.pytest_cache/
 
 # Editor directories and files
 .vscode/*

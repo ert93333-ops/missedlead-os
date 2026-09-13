@@ -5,6 +5,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { type AuthValue, type Role } from "./auth";
 import { LockIcon, MessageIcon, ReceiptIcon, ShieldCheckIcon } from "./icons";
+import { HomeRepairScene } from "./illustrations";
 
 const paths: Record<Role, string> = { customer: "/customer", provider: "/provider", operator: "/operator" };
 
@@ -46,6 +47,11 @@ function AuthGate({ auth }: { auth: AuthValue }) {
   const { signIn } = auth;
   const [message, setMessage] = useState("Enter your email and we’ll send you a secure sign-in link.");
   return <main className="auth-screen" data-testid="auth-gate">
+    <div className="auth-split">
+    <aside className="auth-scene" aria-hidden="true">
+      <HomeRepairScene/>
+      <div className="auth-scene__caption"><strong>Charlotte pilot</strong><span>Licensed pros · county permits verified · deposit protection</span></div>
+    </aside>
     <section className="panel auth-card">
       <p className="eyebrow">WECOVER HOME REPAIR</p>
       <h1>Sign in to save<br/><em>your repair request.</em></h1>
@@ -63,5 +69,6 @@ function AuthGate({ auth }: { auth: AuthValue }) {
       </ul>
       {auth.selectDemoActor && <div className="demo-actors" data-testid="demo-actor-selector"><strong>Demo access · local only</strong>{(["customer", "provider", "operator"] as const).map((role) => <button key={role} type="button" data-testid={`demo-${role}`} onClick={() => auth.selectDemoActor?.(role)}>{role}</button>)}</div>}
     </section>
+    </div>
   </main>;
 }

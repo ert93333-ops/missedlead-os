@@ -1,3 +1,7 @@
+/**
+ * 고객 인테이크 E2E: 미디어 첨부, 비안전 질문 스킵, 불확실성 확인, 가안 확정.
+ * API는 page.route로 목킹(결정적 레인).
+ */
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 type RecordMap = Record<string, unknown>;

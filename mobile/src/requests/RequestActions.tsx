@@ -1,3 +1,6 @@
+/**
+ * 요청 액션 모음: 메시지 전송, 취소/분쟁 사유, 완료 후 평점·리뷰.
+ */
 import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Action, Check, styles } from '../chat/ui';

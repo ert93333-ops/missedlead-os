@@ -1,3 +1,6 @@
+/**
+ * 웹 세션 저장소: localStorage 기반, 토큰 길이·계정 ID 형식 검증.
+ */
 const refreshKey = 'wecover.refresh';
 const accountKey = 'wecover.account';
 const maxTokenLength = 16_384;

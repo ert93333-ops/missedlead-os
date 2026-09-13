@@ -1,3 +1,6 @@
+/**
+ * 채팅 화면 EN/ES 문구 모음(동의·제한·에러·버튼 라벨).
+ */
 import type { Locale } from './protocol';
 
 export const copy = {

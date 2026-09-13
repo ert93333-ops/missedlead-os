@@ -1,3 +1,4 @@
+-- confirm_intake 재정의: 클라이언트 신뢰 경계 — 서버가 평가 토큰/안전 상태를 재검증하도록 수정.
 begin;
 
 drop function if exists confirm_intake(text,text,text,text,jsonb,jsonb,jsonb,text);

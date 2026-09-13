@@ -1,3 +1,6 @@
+/**
+ * 사용량 크레딧/동시성 제한 테스트.
+ */
 import { describe, expect, it } from "vitest";
 import { emptyUsageState, InMemoryIntakeUsageBudget } from "./intake/usage.js";
 

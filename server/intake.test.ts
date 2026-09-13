@@ -1,3 +1,6 @@
+/**
+ * 인테이크 라우트 단위 테스트: 분석·확인·에러 경로.
+ */
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp, InMemoryRepository, type AuthAdapter } from "./app.js";

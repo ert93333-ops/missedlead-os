@@ -1,3 +1,6 @@
+/**
+ * 웹 multipart FormData 생성: retainedFiles에서 실제 File을 꺼내 첨부.
+ */
 import { z } from 'zod';
 import { apiUrl } from '../config';
 import { retainedMedia } from './media.web';

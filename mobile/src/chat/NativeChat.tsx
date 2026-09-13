@@ -1,3 +1,6 @@
+/**
+ * 모바일 인테이크 채팅 화면: 메시지/첨부/평가 패널/확정 플로우를 useIntake 훅에 연결.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { AssessmentPanel } from './AssessmentPanel';

@@ -1,3 +1,6 @@
+/**
+ * AI 평가 패널: 후보 이슈(아이콘 포함), 안전 배너, 추가 질문, 확정 체크리스트 표시.
+ */
 import { useState } from 'react';
 import { Linking, Text, TextInput, View } from 'react-native';
 import { copy } from './copy';

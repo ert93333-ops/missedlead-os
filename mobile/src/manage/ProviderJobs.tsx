@@ -1,3 +1,6 @@
+/**
+ * 공급자 작업 큐: 요청 수락/거절, 항목별 견적 제출(허가 필드 포함), 허가 기록, 증빙 업로드.
+ */
 import { DateField } from './DateField';
 import { Activity } from '../requests/Activity';
 import { ProviderCommunication } from './ProviderCommunication';

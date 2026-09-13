@@ -1,3 +1,7 @@
+/**
+ * 원격(모델) 평가 후처리: 미디어만으로 확정한 경우 구분 질문을 강제하고,
+ * 과도한 high 확신을 medium으로 낮춰 불확실성을 표시한다.
+ */
 import type { AnalyzeInput, ModelAssessment } from './types.js';
 export function refineRemoteAssessment(assessment: ModelAssessment, input: AnalyzeInput): ModelAssessment {
  const initialMediaOnlyEvidence = input.media.length > 0 && !input.history.some(message => message.role === 'assistant');

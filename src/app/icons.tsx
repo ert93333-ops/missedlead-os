@@ -1,3 +1,7 @@
+/**
+ * 홈서비스용 수제 SVG 아이콘 세트(배관·HVAC·전기·안전·허가·증빙 등).
+ * 컴포넌트만 export한다 — Fast Refresh 규칙상 헬퍼는 issueIcon.ts로 분리.
+ */
 import type { ComponentType } from "react";
 
 export type IconProps = { size?: number; title?: string; className?: string };

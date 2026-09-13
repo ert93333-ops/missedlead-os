@@ -1,3 +1,6 @@
+/**
+ * 스페인어 시나리오 + 합성 사진/영상으로 인테이크 미디어 업로드 전 구간을 검증한다.
+ */
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";

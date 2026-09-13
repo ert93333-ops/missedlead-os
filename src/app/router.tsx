@@ -1,3 +1,7 @@
+/**
+ * 역할 라우터 + 로그인 게이트. /customer·/provider·/operator 경로와 actor.role을 맞춘다.
+ * 미인증이면 AuthGate(이메일/비밀번호 로그인 폼 + 신뢰 문구 + dev 데모 선택기)를 렌더링.
+ */
 import { type ReactNode, useEffect, useState } from "react";
 import { type AuthValue, type Role } from "./auth";
 import { LockIcon, MessageIcon, ReceiptIcon, ShieldCheckIcon } from "./icons";

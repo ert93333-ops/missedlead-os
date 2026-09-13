@@ -1,3 +1,6 @@
+/**
+ * 네이티브 첨부 선택: 카메라/갤러리/파일 피커, MIME·확장자 매핑, 용량 검증.
+ */
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';

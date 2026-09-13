@@ -1,3 +1,6 @@
+/**
+ * 리포지토리 시크릿 스캔: 생성물/의존성 제외, 커밋된 파일에서 키·토큰 패턴을 찾는다.
+ */
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { resolve, relative, sep } from 'node:path';
 

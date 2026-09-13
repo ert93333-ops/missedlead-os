@@ -1,3 +1,4 @@
+-- 인테이크-매칭 연결: assessment ID, 매칭 함수, provider 목록 컬럼 등.
 begin;
 
 alter table service_requests

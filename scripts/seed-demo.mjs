@@ -1,3 +1,7 @@
+/**
+ * 데모 계정 시드: 고객 1 + 기술자 3을 생성하고 profiles 역할을 설정한다.
+ * DEMO_MODE=true + 로컬 Supabase(56321)에서만 동작. DEMO_CUSTOMER_*를 .env.local에 기록한다.
+ */
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';

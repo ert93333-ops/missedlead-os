@@ -1,3 +1,6 @@
+/**
+ * 역할별 워크스페이스 셸: 스킨 적용, SpecStrip(데이터플레이트 바), 하위 화면 배치.
+ */
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, View, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';

@@ -1,3 +1,6 @@
+/**
+ * 모바일 Supabase 인증: 세션 복원/저장, 이메일 로그인, 역할 해석.
+ */
 import { createClient, type Session } from '@supabase/supabase-js';
 import {clearSession,readRefresh,writeRefresh} from './sessionStorage';
 import { AppState } from 'react-native';

@@ -1,3 +1,6 @@
+/**
+ * 금액/날짜 파싱 테스트.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMoney, parseDateInput, FormInputError } from './formValues.ts';

@@ -1,3 +1,6 @@
+/**
+ * 인테이크 사용량 제한: 계정/전역 일일 크레딧과 동시 진행 수를 intake_usage_events로 추적.
+ */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";

@@ -1,3 +1,6 @@
+/**
+ * 안전 차단 E2E: 위험 인테이크는 매칭/결제 API를 호출하지 않고 하드 블록되는지 검증.
+ */
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 

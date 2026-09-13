@@ -1,3 +1,6 @@
+/**
+ * 역할별 /api/dashboard 및 features 읽기 라우트 접근 검증.
+ */
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp, InMemoryRepository } from "./app.js";

@@ -1,3 +1,6 @@
+/**
+ * 채팅 전용 소형 SVG 아이콘(클립·전송·닫기·사진). currentColor 스트로크 방식.
+ */
 type IconProps = { size?: number; title?: string };
 
 export function PaperclipIcon({ size = 20, title }: IconProps) {

@@ -1,3 +1,7 @@
+/**
+ * 역할 스킨 토큰(고객/공급자/운영자 팔레트·타이포·밀도). 웹 styles.css의 모바일 포트.
+ * styles/palette 프록시가 여기 토큰을 읽어 역할 전환 시 전 화면이 따라간다.
+ */
 // Role skins — mobile port of the web design system in src/styles.css.
 // Same named palette: primer/graphite/utility/hivis/steel/signal.
 export type SkinRole = 'customer' | 'provider' | 'operator';

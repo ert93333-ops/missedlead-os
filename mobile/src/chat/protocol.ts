@@ -1,3 +1,6 @@
+/**
+ * 인테이크 API zod 스키마·타입: 평가 응답, 메시지, 참조 링크(https만 허용) 등.
+ */
 import { z } from 'zod';
 
 export const localeSchema = z.enum(['en', 'es']);

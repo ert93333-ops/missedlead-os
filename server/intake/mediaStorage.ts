@@ -1,3 +1,7 @@
+/**
+ * 인테이크 미디어 스토리지: 파일 검증(개수/크기/형식), Supabase Storage 업로드,
+ * 서명 URL 발급·목록 조회.
+ */
 import { publicMediaUrl } from './publicMedia.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Express, NextFunction, Request, Response } from "express";

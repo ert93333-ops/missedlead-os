@@ -1,3 +1,6 @@
+/**
+ * 공급자 작업 유틸 테스트.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getProviderEvidenceReadiness, hasProviderQuote } from './providerJob.ts';

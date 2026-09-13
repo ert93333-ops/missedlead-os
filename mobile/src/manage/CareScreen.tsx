@@ -1,3 +1,6 @@
+/**
+ * 케어 화면: 번들/전담 기사/유지보수 계획/리마인더 조회와 액션.
+ */
 import { useRemote, useTask, words } from './state';
 import { useState } from 'react';
 import { Text, View } from 'react-native';

@@ -1,3 +1,5 @@
+# 로컬 Supabase 스택 설정: 포트(56321~), auth site_url·허용 redirect 목록.
+# trycloudflare 와일드카드는 외부 테스트 터널용.
 project_id = "missedlead-os"
 
 [api]

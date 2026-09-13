@@ -1,3 +1,6 @@
+/**
+ * 진단 지식 타입: DiagnosticRecord(카테고리·신호·질문·안전관찰·출처·레드플래그).
+ */
 export type KnowledgeLocale = 'en' | 'es';
 export type LocalizedText = Readonly<Record<KnowledgeLocale, string>>;
 export type DiagnosticSource = { readonly title: string; readonly url: string; readonly accessedAt: string };

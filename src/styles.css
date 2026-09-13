@@ -1,3 +1,8 @@
+/**
+ * 웹 디자인 시스템 전체: 토큰(역할별 팔레트·타이포·라운드), 레이아웃, 컴포넌트,
+ * 알림 톤, 스테퍼, 견적 카드, 폼, 반응형, prefers-reduced-motion 대응.
+ * 고객=프라이머 페이퍼+블루 / 공급자=다크+앰버 / 운영자=스틸 컴팩트.
+ */
 /* ==========================================================================
    WeCover — Charlotte home-services trust platform
    Design system: "field ticket" tokens + three role skins.

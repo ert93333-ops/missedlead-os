@@ -1,3 +1,6 @@
+/**
+ * protocol.ts 스키마 검증 단위 테스트.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateAttachments, ChatError, confirmationSchema, assessmentSchema } from './protocol.ts';

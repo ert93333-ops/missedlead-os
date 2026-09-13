@@ -1,3 +1,7 @@
+/**
+ * B2B 조직 API: 조직/지점/멤버 CRUD, 지점별 요청 연결, 견적 승인 워크플로, 연간 리포트.
+ * 모두 Supabase RPC/테이블 경유, 소유자·승인자 권한은 DB 함수가 강제한다.
+ */
 import type { Express } from 'express';
 import { z } from 'zod';
 import { featureClient, featureError } from '../context.js';

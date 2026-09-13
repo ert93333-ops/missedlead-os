@@ -1,3 +1,6 @@
+/**
+ * 업로드 미디어 정제: ffmpeg/ffprobe로 변환·메타데이터 제거. 실패 시 MediaSanitizationError.
+ */
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

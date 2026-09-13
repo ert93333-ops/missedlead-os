@@ -1,3 +1,6 @@
+/**
+ * 관리 화면 공용 상태: locale 문구 선택, 통화 포맷, 비동기 작업 훅(useTask).
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
 import type { z } from 'zod';

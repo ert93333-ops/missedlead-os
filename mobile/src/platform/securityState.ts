@@ -1,3 +1,6 @@
+/**
+ * 권한(카메라/마이크 등) 상태 추상화: 요청·재요청 가능 여부 어댑터.
+ */
 export type PermissionStatus = {
   readonly granted: boolean;
   readonly canAskAgain: boolean;

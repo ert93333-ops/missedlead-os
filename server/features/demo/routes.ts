@@ -1,3 +1,7 @@
+/**
+ * 데모 로그인 엔드포인트 POST /api/demo/login. DEMO_MODE=true + 고정 자격증명(test/test)
+ * + env의 데모 고객 계정으로 실제 Supabase 세션을 발급한다. 데모 플래그/고객 역할 검증 후 토큰 반환.
+ */
 import { createClient } from '@supabase/supabase-js';
 import type { Express } from 'express';
 import { rateLimit } from 'express-rate-limit';

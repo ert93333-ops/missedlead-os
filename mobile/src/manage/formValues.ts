@@ -1,3 +1,6 @@
+/**
+ * 폼 입력 파싱: 금액(센트 변환)·날짜 검증, FormInputError 코드.
+ */
 export class FormInputError extends Error {
   constructor(readonly code: 'money' | 'date' | 'file_size') { super(code); this.name = 'FormInputError'; }
 }

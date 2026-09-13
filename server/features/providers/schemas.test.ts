@@ -1,3 +1,6 @@
+/**
+ * 공급자 입력 스키마 경계값 테스트.
+ */
 import { describe, expect, it } from 'vitest';
 import { applicationSchema, quoteSchema } from './schemas.js';
 

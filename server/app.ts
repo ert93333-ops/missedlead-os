@@ -1,3 +1,7 @@
+/**
+ * Express 앱 조립부. 인증 미들웨어, 역할 인가, /api/capabilities, 레거시 repository 라우트와
+ * features/*(Supabase RPC) 라우트를 한 앱에 마운트한다. maskMessage 등 공유 유틸 포함.
+ */
 import { registerEmergencyRoute } from './intake/emergency.js';
 import { registerDemoRoutes } from './features/demo/routes.js';
 import express, { type NextFunction, type Request, type Response } from "express";

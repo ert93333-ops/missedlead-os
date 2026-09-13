@@ -1,3 +1,6 @@
+/**
+ * 결제 재개/중단 경로 테스트.
+ */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyState, InMemoryRepository, SupabaseRepository, type CommandContext, type PaymentKind } from "./repository.js";

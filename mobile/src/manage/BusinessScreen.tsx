@@ -1,3 +1,6 @@
+/**
+ * B2B 관리 화면: 조직/지점/멤버 관리, 견적 승인, 연간 리포트.
+ */
 import { dollars, useRemote, useTask, words } from './state';
 import { useState } from 'react';
 import { Text, View } from 'react-native';

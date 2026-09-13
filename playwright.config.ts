@@ -1,3 +1,7 @@
+/**
+ * Playwright 설정: tests/e2e 대상, 단일 워커, vite dev 서버(5191) 자동 기동,
+ * PLAYWRIGHT_EXTERNAL_SERVER=1이면 외부 서버 사용.
+ */
 import { defineConfig, devices } from '@playwright/test'
 
 const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'

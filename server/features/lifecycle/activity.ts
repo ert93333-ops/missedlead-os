@@ -1,3 +1,6 @@
+/**
+ * 요청 활동(메시지/일정/증빙 목록) 조회. accessibleRequest로 요청 접근권을 먼저 검증한다.
+ */
 import type { Express, Request } from 'express';
 import { z } from 'zod';
 import { featureActor, featureClient, featureError, featureService, FeatureError } from '../context.js';

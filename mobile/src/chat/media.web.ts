@@ -1,3 +1,6 @@
+/**
+ * 웹 첨부 선택: input[type=file]로 File을 받아 메모리 맵(retainedFiles)에 보관.
+ */
 import { ChatError, validateAttachments, type Attachment } from './protocol';
 
 const retainedFiles = new Map<string, File>();

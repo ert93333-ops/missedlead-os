@@ -1,3 +1,7 @@
+/**
+ * 결제 모드 결정(disabled|drain|enabled). 배포 매니페스트의 capability 해시와
+ * 승인·롤백 소유자 바인딩을 검증해 실수로 활성화되는 것을 막는다.
+ */
 import { verify } from "node:crypto";
 import { z } from "zod";
 

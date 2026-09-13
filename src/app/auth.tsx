@@ -1,3 +1,9 @@
+/**
+ * Supabase Auth 래퍼. 세션을 감시하고 actor(id/email/role)와 accessToken을 제공한다.
+ * 역할은 session.user.app_metadata.role에서 읽는다(없으면 customer).
+ * 공개 호스트(터널 등)에서는 loopback Supabase URL 대신 same-origin /supa 프록시를 사용한다.
+ * password 있으면 signInWithPassword, 없으면 매직링크(OTP). selectDemoActor는 dev 전용.
+ */
 import { createClient, type Session } from "@supabase/supabase-js";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 

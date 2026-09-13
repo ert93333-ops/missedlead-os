@@ -1,3 +1,6 @@
+/**
+ * paymentModes 해석·매니페스트 바인딩 검증 테스트.
+ */
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp, type StripePayments } from "./app.js";

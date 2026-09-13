@@ -1,3 +1,6 @@
+/**
+ * 로컬 인테이크 E2E 검증: QA 고객 세션 생성→분석→확정→대시보드 반영까지 확인.
+ */
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

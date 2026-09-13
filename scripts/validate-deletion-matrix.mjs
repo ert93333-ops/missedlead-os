@@ -1,3 +1,6 @@
+/**
+ * 계정 삭제 매트릭스 문서의 데이터 클래스/액션/보존 정책 형식을 검증한다.
+ */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

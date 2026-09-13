@@ -1,3 +1,6 @@
+/**
+ * 요청 활동 타임라인: 메시지·일정·증빙 이벤트 표시와 새로고침.
+ */
 import { useEffect, useState } from 'react';
 import { Image, Linking, Text, View } from 'react-native';
 import { Action, styles } from '../chat/ui';

@@ -1,3 +1,6 @@
+/**
+ * 네이티브 날짜/시간 선택 필드(DateTimePicker 래핑).
+ */
 import { useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform, Text, View } from 'react-native';

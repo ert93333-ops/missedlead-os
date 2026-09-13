@@ -1,3 +1,6 @@
+/**
+ * 인테이크 도메인 zod 스키마와 타입: locale/category/safety/hazard, 평가 결과, 입력 페이로드.
+ */
 import { z } from "zod";
 
 export const localeSchema = z.enum(["en", "es"]);

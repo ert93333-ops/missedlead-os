@@ -1,3 +1,6 @@
+/**
+ * 결제 비활성 구현체. PAYMENTS_MODE=disabled일 때 모든 결제 호출을 PaymentsDisabledError로 fail-closed.
+ */
 import type { StripePayments } from "./app.js";
 
 export class PaymentsDisabledError extends Error {

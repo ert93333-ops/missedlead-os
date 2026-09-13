@@ -1,3 +1,6 @@
+/**
+ * 정산 보류 E2E: 완료 후 72시간 내 preflight/정산이 거부되는지 확인.
+ */
 import { expect, test, type Page } from "@playwright/test";
 import { resolve } from "node:path";
 

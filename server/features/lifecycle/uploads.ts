@@ -1,3 +1,7 @@
+/**
+ * 증빙 파일 업로드 POST /api/requests/:id/evidence-files. multer 메모리 스토리지,
+ * 파일명/MIME/25MB 제한을 zod로 검증 후 스토리지에 저장한다.
+ */
 import { createHash, randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import multer from 'multer';

@@ -1,3 +1,7 @@
+/**
+ * 케어(사후관리) 기능: 번들 우선순위 적용/갱신, 전담 기사 제안·수락·해제, 유지보수 리마인더.
+ * care_* RPC 호출 래퍼 모음.
+ */
 import type { Express } from 'express';
 import { z } from 'zod';
 import { featureClient, featureService, featureError } from '../context.js';

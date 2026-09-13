@@ -1,3 +1,6 @@
+/**
+ * 웹 결제 비활성 안내 컴포넌트.
+ */
 import { Text, View } from 'react-native';
 import { styles } from '../chat/ui';
 import type { Locale } from './contracts';

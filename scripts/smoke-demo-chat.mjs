@@ -1,3 +1,6 @@
+/**
+ * 배포/터널 대상 데모 스모크: 로그인→역할 확인→합성 이미지 인테이크 분석→리포트 저장.
+ */
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';

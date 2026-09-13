@@ -1,3 +1,6 @@
+/**
+ * 대시보드 계약 스키마 테스트.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activitySchema, canAcknowledgeCompletion, filterQuotes, hasRequiredCompletionEvidence, requestStatus } from './contracts.ts';

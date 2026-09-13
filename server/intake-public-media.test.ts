@@ -1,3 +1,6 @@
+/**
+ * publicMediaUrl 재작성 조건 테스트.
+ */
 import { it, expect } from 'vitest';
 import { publicMediaUrl } from './intake/publicMedia.js';
 const env={PUBLIC_APP_URL:'https://preview.example',SUPABASE_URL:'http://127.0.0.1:56321'};

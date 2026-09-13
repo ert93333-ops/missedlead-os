@@ -1,3 +1,7 @@
+/**
+ * assessmentToken HMAC 서명/검증. analyze 결과와 confirm 요청을 묶는 위변조 방지 토큰.
+ * 만료·서명·소유자 불일치는 InvalidAssessmentTokenError.
+ */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { signedAssessmentSchema, signedTranslationSchema, type SignedAssessment, type SignedTranslation } from "./types.js";
 

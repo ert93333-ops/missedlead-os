@@ -1,3 +1,6 @@
+/**
+ * 네이티브 방문 일시 제안 피커.
+ */
 import { useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform, Text, View } from 'react-native';

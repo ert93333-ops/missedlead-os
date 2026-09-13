@@ -1,3 +1,4 @@
+# CI 워크플로: 서버 vitest, 모바일 node --test, 웹 lint/build를 push·PR마다 실행한다.
 name: ci
 
 on:

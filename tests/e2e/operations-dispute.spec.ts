@@ -1,3 +1,6 @@
+/**
+ * 운영자 분쟁 해결 E2E: 증빙 기반 분쟁 처리, 환불, 불변 감사 이벤트 확인.
+ */
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 

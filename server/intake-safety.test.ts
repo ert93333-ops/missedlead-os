@@ -1,3 +1,6 @@
+/**
+ * safety 패턴 탐지와 enforceSafetyFloor 격상 테스트.
+ */
 import { describe, expect, it } from "vitest";
 import { enforceSafetyFloor } from "./intake/safety.js";
 import type { ModelAssessment } from "./intake/types.js";

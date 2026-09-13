@@ -1,3 +1,4 @@
+-- intake_usage_events 테이블: 일일 크레딧/동시성 제한의 사용량 기록.
 create table if not exists intake_usage_events (
   id uuid primary key default gen_random_uuid(),
   actor_id uuid not null references profiles(id) on delete cascade,

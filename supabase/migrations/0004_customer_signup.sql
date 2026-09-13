@@ -1,3 +1,4 @@
+-- 신규 가입자 profiles 자동 생성 트리거(handle_new_customer_profile).
 begin;
 
 create function public.handle_new_customer_profile()

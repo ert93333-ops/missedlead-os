@@ -1,3 +1,6 @@
+/**
+ * 견적 비교 리스트: 언어/일정 필터와 정렬된 견적 카드.
+ */
 import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Action, styles } from '../chat/ui';

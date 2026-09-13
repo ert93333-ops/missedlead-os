@@ -1,3 +1,6 @@
+/**
+ * 응급 경로: emergency 판정 시 매칭/결제를 차단하고 긴급 안내·감사 이벤트를 기록한다.
+ */
 import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import { rateLimit } from 'express-rate-limit';

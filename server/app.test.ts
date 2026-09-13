@@ -1,3 +1,6 @@
+/**
+ * server/app.ts 엔드포인트·인가·마스킹의 인메모리 단위 테스트.
+ */
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp, InMemoryRepository, type AuthAdapter, type StripePayments } from "./app.js";

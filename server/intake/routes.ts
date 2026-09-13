@@ -1,3 +1,7 @@
+/**
+ * AI 인테이크 라우트: POST /api/intake/analyze(멀티모달 분석), 번역, 미디어 업로드·조회,
+ * 가안 확정(confirm). 안전 게이트·사용량 제한·토큰 서명을 조합한다.
+ */
 import { emergencyGuidance } from './emergency.js';
 import { diagnosticContext } from './diagnosticContext.js';
 import { createHash, randomUUID } from "node:crypto";

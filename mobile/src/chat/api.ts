@@ -1,3 +1,6 @@
+/**
+ * 네이티브 multipart FormData 생성: 텍스트 필드 + 미디어 파일 첨부.
+ */
 import { fetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import { z } from 'zod';

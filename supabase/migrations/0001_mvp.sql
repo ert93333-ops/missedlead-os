@@ -1,3 +1,4 @@
+-- 초기 스키마: profiles/requests/quotes/jobs/evidence/disputes/payments/audit 등 코어 테이블과 RLS.
 begin;
 
 create extension if not exists pgcrypto;

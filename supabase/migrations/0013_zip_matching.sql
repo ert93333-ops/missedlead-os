@@ -1,3 +1,4 @@
+-- ZIP 기반 매칭: 지원서 저장 RPC 개편, 서비스 지역·카테고리로 공급자 후보를 선택한다.
 begin;
 
 create or replace function save_provider_application(p_data jsonb) returns provider_applications

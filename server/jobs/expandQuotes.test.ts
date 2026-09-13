@@ -1,3 +1,6 @@
+/**
+ * expandQuotes 잡 주기·에러 처리 테스트.
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startQuoteExpansion } from "./expandQuotes.js";
 

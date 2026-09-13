@@ -1,3 +1,6 @@
+/**
+ * 지식 검색 정규화·매칭 테스트.
+ */
 import { describe, expect, it } from 'vitest';
 import { diagnosticKnowledge, retrieveDiagnosticKnowledge } from './index.js';
 import { sources } from './sources.js';

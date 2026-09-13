@@ -1,3 +1,4 @@
+-- B2B 완성: business_organizations/members/locations, 지점 요청 연결, 견적 승인.
 begin;
 create table business_organizations(id uuid primary key default gen_random_uuid(),owner_id uuid not null references profiles(id),name text not null check(length(btrim(name)) between 1 and 120),created_at timestamptz not null default now());
 create table business_members(organization_id uuid not null references business_organizations(id),profile_id uuid not null references profiles(id),role text not null check(role in('member','approver')),created_at timestamptz not null default now(),primary key(organization_id,profile_id));

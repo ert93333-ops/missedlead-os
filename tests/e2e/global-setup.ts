@@ -1,3 +1,6 @@
+/**
+ * Playwright globalSetup: vite cold-transform을 미리 워밍해 첫 테스트 타임아웃을 방지한다.
+ */
 import { chromium } from '@playwright/test'
 
 // Vite dev cold-transform can take several minutes on this host. Warm the

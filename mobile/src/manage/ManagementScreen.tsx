@@ -1,3 +1,7 @@
+/**
+ * 관리 화면 루트: 역할·상태에 따라 공급자 작업/지원서/케어/비즈니스 화면으로 분기하고
+ * 운영자용 허가 검증 큐를 포함한다.
+ */
 import { useRemote, useTask, words } from './state';
 import { useState } from 'react';
 import { Text, View } from 'react-native';

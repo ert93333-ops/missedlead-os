@@ -1,3 +1,6 @@
+/**
+ * 진단 지식 검색기: 증상 텍스트 정규화(액센트 제거) 후 signals 매칭으로 관련 레코드를 찾는다.
+ */
 import { diagnosticKnowledge } from './records.js';
 import type { DiagnosticRecord, KnowledgeLocale } from './types.js';
 export { diagnosticKnowledge } from './records.js';

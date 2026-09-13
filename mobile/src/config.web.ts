@@ -1,3 +1,6 @@
+/**
+ * 웹 빌드용 설정: window.location 기준 same-origin API/Supabase 해석.
+ */
 import { z } from 'zod';
 
 const origin = typeof window !== 'undefined' ? window.location.origin : '';

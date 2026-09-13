@@ -1,3 +1,6 @@
+/**
+ * 공급자-고객 소통 화면: 메시지, 일정 제안/확정, 증빙 목록.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { z } from 'zod';

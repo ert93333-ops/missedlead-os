@@ -1,3 +1,6 @@
+/**
+ * 미디어 업로드 검증·제한·스토리지 경로 테스트.
+ */
 import { createHash } from "node:crypto";
 import express from "express";
 import request from "supertest";

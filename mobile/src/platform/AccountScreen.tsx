@@ -1,3 +1,6 @@
+/**
+ * 계정 화면: 프로필·프로퍼티(주소/건물 유형) 등록과 목록.
+ */
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { z } from 'zod';

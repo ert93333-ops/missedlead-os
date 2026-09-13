@@ -1,3 +1,6 @@
+/**
+ * 요청/견적/증빙/일정/활동 응답의 zod 스키마(대시보드 계약).
+ */
 import { z } from 'zod';
 
 const record = { id: z.string(), requestId: z.string() };

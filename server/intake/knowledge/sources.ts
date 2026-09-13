@@ -1,3 +1,6 @@
+/**
+ * 지식 레코드가 참조하는 제조사/공식 문서 출처 목록과 접근일.
+ */
 import { source } from './types.js';
 const researchedSource = (title: string, url: string) => ({ ...source(title, url), accessedAt: '2026-09-06' });
 export const sources = {

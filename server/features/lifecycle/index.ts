@@ -1,3 +1,7 @@
+/**
+ * 요청 라이프사이클 API: 서비스 ZIP 검증(validateCoverage), 스케줄/완료/정산 단계 등
+ * 라이프사이클 라우트 등록.
+ */
 import type { Express, Request } from 'express';
 import { z } from 'zod';
 import type { SignedAssessment } from '../../intake/types.js';

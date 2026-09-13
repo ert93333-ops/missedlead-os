@@ -1,3 +1,6 @@
+/**
+ * 웹 채팅 임시저장: 첨부는 File 참조만 유지(재첨부 필요 시 오류 코드 반환).
+ */
 import { z } from 'zod';
 import { assessmentSchema, confirmationSchema, localeSchema, translationSchema } from './protocol';
 import { missingMedia } from './media.web';

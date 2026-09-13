@@ -1,3 +1,6 @@
+/**
+ * media.ts 정제 파이프라인 테스트.
+ */
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

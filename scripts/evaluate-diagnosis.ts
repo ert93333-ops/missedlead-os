@@ -1,3 +1,7 @@
+/**
+ * Gemini 진단 품질 평가 스크립트. 합성 미디어/시나리오로 provider→safetyFloor→결과를 검증한다.
+ * GEMINI_API_KEY 필요. --rerun/--final로 호출 횟수 제한.
+ */
 import { config } from 'dotenv';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';

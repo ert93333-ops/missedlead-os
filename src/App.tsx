@@ -1,3 +1,7 @@
+/**
+ * 웹 대시보드 루트. customer/provider/operator 3개 역할 뷰를 한 파일에서 조합한다.
+ * 대시보드 데이터 패치, 견적 비교·선택, 허가 패널, 증빙/변경/분쟁/정산/감사 섹션을 포함.
+ */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./styles.css";
 import { AuthProvider, type AuthValue, type Role } from "./app/auth";

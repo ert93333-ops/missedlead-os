@@ -1,3 +1,6 @@
+/**
+ * repository 인테이크 저장·조회 로직 테스트.
+ */
 import { describe, expect, it } from "vitest";
 import { emptyState, InMemoryRepository, type ProviderEligibility, type Result } from "./repository.js";
 

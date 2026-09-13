@@ -1,3 +1,4 @@
+-- 지연 매칭: expand_stale_quote_requests로 일정 시간 후 검색 범위를 넓힌다.
 begin;
 
 create function expand_stale_quote_requests(p_now timestamptz) returns integer

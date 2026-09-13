@@ -1,3 +1,7 @@
+/**
+ * features/* 라우트 공용 컨텍스트. res.locals.actor 파싱(featureActor),
+ * 사용자/서비스 Supabase 클라이언트 생성(featureClient/featureService), FeatureError 타입.
+ */
 import { createClient } from '@supabase/supabase-js';
 import type { Request, Response } from 'express';
 import { z } from 'zod';

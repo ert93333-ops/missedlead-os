@@ -1,3 +1,4 @@
+-- 인테이크 미디어 허용 형식 제약을 확장(영상/음성 포함)하는 제약 교체.
 do $migration$
 declare
   constraint_name text;

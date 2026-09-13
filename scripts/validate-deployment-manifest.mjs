@@ -1,3 +1,6 @@
+/**
+ * 배포 매니페스트 필수 필드·해시 형식·승인/폐기 소유자 존재 여부를 검증한다.
+ */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

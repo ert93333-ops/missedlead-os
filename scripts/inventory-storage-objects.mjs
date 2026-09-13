@@ -1,3 +1,6 @@
+/**
+ * 스토리지 객체 목록을 before/after로 비교해 누수(미삭제) 여부를 점검하는 인벤토리 도구.
+ */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 

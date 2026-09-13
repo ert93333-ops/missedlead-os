@@ -1,3 +1,4 @@
+-- 라이프사이클 완성: service_zips(서비스 지역), safety_reports 등 잔여 테이블/정책.
 begin;
 create table public.service_zips(zip text primary key check(zip ~ '^[0-9]{5}$'),updated_at timestamptz not null default now());
 alter table public.service_zips enable row level security;

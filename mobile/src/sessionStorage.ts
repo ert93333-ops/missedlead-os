@@ -1,3 +1,6 @@
+/**
+ * 네이티브 세션 저장소(보안 스토리지): refresh 토큰·계정 ID 보관/삭제.
+ */
 import * as SecureStore from 'expo-secure-store';
 import { clearAccountDraft } from './chat/draft';
 

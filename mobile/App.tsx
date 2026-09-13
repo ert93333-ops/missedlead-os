@@ -1,3 +1,6 @@
+/**
+ * Expo 앱 루트. 폰트 로드, 세션 복원, 역할별 화면 분기, 로케일 상태를 관리한다.
+ */
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';

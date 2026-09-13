@@ -1,3 +1,6 @@
+/**
+ * 관리 화면 공용 컴포넌트: Field/Section/Screen 등 폼 프리미티브.
+ */
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { Action, styles } from '../chat/ui';

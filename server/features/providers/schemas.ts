@@ -1,3 +1,6 @@
+/**
+ * 공급자 지원서·견적 입력 zod 스키마. 금액(cents) 상한과 미래 일시 검증 포함.
+ */
 import { z } from 'zod';
 
 const cents = z.number().int().min(0).max(3_999_999);

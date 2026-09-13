@@ -1,3 +1,6 @@
+/**
+ * Supabase 로컬 스택 대상 API 통합 테스트. 자격증명 없으면 스킵.
+ */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";

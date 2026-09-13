@@ -1,3 +1,7 @@
+/**
+ * 공급자 API 라우트: 지원서 조회/제출, 요청 큐, 견적 제출(submit_itemized_quote),
+ * 허가 기록, 완료 보고 등. 인가는 featureClient(RLS)에 위임.
+ */
 import type { Express } from 'express';
 import { z } from 'zod';
 import { featureActor, featureClient, featureError, FeatureError } from '../context.js';

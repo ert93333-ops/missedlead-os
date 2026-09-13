@@ -1,3 +1,6 @@
+/**
+ * API 호출 헬퍼: ApiError 타입과 EN/ES 오류 메시지 매핑.
+ */
 import { fetch } from 'expo/fetch';
 import type { z } from 'zod';
 import { apiUrl } from '../config';

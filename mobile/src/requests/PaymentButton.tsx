@@ -1,3 +1,6 @@
+/**
+ * 네이티브 결제 버튼: clientSecret 발급 후 Stripe 결제 시트를 연다(결제 비활성 시 서버가 거부).
+ */
 import { useState } from 'react';
 import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 import { z } from 'zod';

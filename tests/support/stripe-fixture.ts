@@ -1,3 +1,7 @@
+/**
+ * Stripe 웹훅 픽스처 서버: 통합 테스트가 payment_intent/dispute 이벤트를 합성 발행한다.
+ * x-fixture-secret 헤더가 없으면 403.
+ */
 import http from 'node:http'
 import Stripe from 'stripe'
 

@@ -1,3 +1,6 @@
+/**
+ * 진단 지식 레코드를 sqlite/JSON으로보내는 유틸(data/diagnostic-knowledge.*).
+ */
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';

@@ -1,3 +1,6 @@
+/**
+ * 고객 요청 목록/상세 화면: 견적 비교·선택, 방문 일정, 상태 타임라인.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, ScrollView, Text, View } from 'react-native';
 import { z } from 'zod';

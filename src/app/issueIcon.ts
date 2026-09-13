@@ -1,3 +1,7 @@
+/**
+ * 후보 이슈 라벨(EN/ES 키워드)을 icons.tsx의 아이콘 컴포넌트로 매핑한다.
+ * 예: "leak/pipe"→물방울, "gas/smoke"→경고, "AC/heat"→온도계.
+ */
 import { ApplianceIcon, BoltIcon, DropletIcon, HouseIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "./icons";
 
 const issueIconMatchers: Array<[RegExp, IconComponent]> = [

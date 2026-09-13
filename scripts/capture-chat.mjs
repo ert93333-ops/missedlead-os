@@ -1,3 +1,7 @@
+/**
+ * 로컬 QA 세션으로 채팅 인테이크를 실제 API까지 돌려 스크린샷·응답 증적을 artifacts에 남긴다.
+ * localhost 전용 — data/local-qa-auth.json의 세션을 사용한다.
+ */
 import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

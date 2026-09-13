@@ -1,3 +1,6 @@
+/**
+ * 인테이크 상태 훅: 임시저장 복원, 분석 호출, 질문/선택/확정 상태 머신.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { multipart, request } from './api';
 import { analyzeAfterSafety, safetyPreflightSchema, conversationLimitReached, nextHistory, hasUnsentDetails, assessmentSchema, confirmationSchema, translationSchema, uploadSchema, ChatError, type Assessment, type Attachment, type Confirmation, type Locale, type Message, type Translation } from './protocol';

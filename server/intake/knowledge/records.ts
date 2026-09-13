@@ -1,3 +1,7 @@
+/**
+ * 검수된 진단 지식 레코드 모음(EN/ES). 각 레코드는 증상·후보 원인·추가 질문·
+ * 안전 관찰 방법·출처를 담으며 "현장 확인 필요" 한계를 명시한다.
+ */
 import { bilingual as l } from './types.js';
 import type { DiagnosticRecord, DiagnosticSource, LocalizedText } from './types.js';
 import { sources as s } from './sources.js';

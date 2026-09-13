@@ -1,3 +1,4 @@
+-- 공급자 완성: provider_applications, 검증 필드, 지원서 저장/검토 RPC.
 begin;
 create table public.provider_applications (
  provider_id uuid primary key references public.profiles(id), organization_name text not null, contact_name text not null,

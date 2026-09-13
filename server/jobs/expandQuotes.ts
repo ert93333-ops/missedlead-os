@@ -1,3 +1,7 @@
+/**
+ * 견적 확장 잡: 일정 시간 매칭이 부족한 요청의 검색 범위를 넓히는 expand_stale_quote_requests를
+ * 주기적으로 실행한다(0014 지연 매칭).
+ */
 import type { Repository } from "../repository.js";
 
 type QuoteExpansionOptions = {

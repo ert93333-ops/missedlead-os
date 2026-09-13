@@ -1,3 +1,6 @@
+/**
+ * 공급자 서류(라이선스/보험) 업로드 POST /api/providers/documents. 단일 파일 10MB 제한.
+ */
 import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import multer from 'multer';

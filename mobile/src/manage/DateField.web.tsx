@@ -1,3 +1,6 @@
+/**
+ * 웹 날짜/시간 입력 필드(datetime-local/date input).
+ */
 import { useId } from 'react';
 import { Text, View } from 'react-native';
 import { palette, styles } from '../chat/ui';

@@ -1,3 +1,6 @@
+/**
+ * 네이티브 채팅 임시저장: 파일 시스템에 상태를 저장/복원한다.
+ */
 import { Directory, File, Paths } from 'expo-file-system';
 import { z } from 'zod';
 import { assessmentSchema, confirmationSchema, localeSchema, translationSchema } from './protocol';

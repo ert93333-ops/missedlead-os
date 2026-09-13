@@ -1,3 +1,6 @@
+/**
+ * Expo 웹 번들 서빙 + /api·/supabase(인증/서명 미디어만 허용) 로컬 프록시.
+ */
 import express from 'express';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';

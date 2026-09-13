@@ -1,3 +1,5 @@
+-- 데모 격리: profiles.is_demo 추가 + guard_demo_profile 트리거로
+-- 데모 계정의 operator·금융 접근을 차단한다.
 begin;
 alter table profiles add column is_demo boolean not null default false;
 create function guard_demo_profile() returns trigger language plpgsql security definer set search_path=public as $$

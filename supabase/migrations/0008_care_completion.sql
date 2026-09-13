@@ -1,3 +1,4 @@
+-- 케어 완성: care_bundles/items, care_dedicated(전담 기사), 유지보수·리마인더 테이블.
 begin;
 create table care_bundles(id uuid primary key default gen_random_uuid(),customer_id uuid not null references profiles(id),service_address text not null,primary_request_id uuid not null references service_requests(id),scope_snapshot jsonb not null,status text not null default 'active' check(status in('active','released')),created_at timestamptz not null default now());
 create table care_bundle_items(bundle_id uuid not null references care_bundles(id),request_id uuid primary key references service_requests(id));

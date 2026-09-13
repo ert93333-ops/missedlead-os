@@ -1,3 +1,6 @@
+/**
+ * 웹 임시저장 직렬화/복원 테스트.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { draftFile, readDraft, writeDraft } from './draft.web.ts';

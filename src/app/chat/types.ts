@@ -1,3 +1,6 @@
+/**
+ * 인테이크 채팅의 공유 타입: 메시지, 후보 이슈, 안전 질문, 평가 결과, 확인 페이로드.
+ */
 export type IntakeLocale = "en" | "es";
 
 export type IntakeMessage = {

@@ -1,3 +1,7 @@
+/**
+ * 요청별 업로드 미디어 갤러리. GET /api/requests/:id/intake-media 결과를 썸네일로 표시.
+ * 서명 URL 만료 시간을 함께 보여 주며 로딩/에러 상태를 처리한다.
+ */
 import { useCallback, useEffect, useState } from "react";
 import { CameraIcon } from "../icons";
 

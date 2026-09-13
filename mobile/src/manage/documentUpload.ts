@@ -1,3 +1,6 @@
+/**
+ * 네이티브 서류 업로드 FormData 생성(10MB 제한).
+ */
 import { File } from 'expo-file-system';
 import { FormInputError } from './formValues';
 export async function documentUpload(kind: string, asset: { readonly uri: string; readonly name: string }): Promise<FormData> {

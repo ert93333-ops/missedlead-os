@@ -1,3 +1,6 @@
+/**
+ * 공급자 작업 타입/유틸: 증빙 종류, 대시보드 데이터 매핑.
+ */
 export const providerEvidenceKinds = ['before', 'during', 'after', 'receipt', 'warranty'] as const;
 
 export type ProviderEvidenceKind = typeof providerEvidenceKinds[number];

@@ -1,3 +1,7 @@
+/**
+ * 결제 리컨실 잡: Stripe 클레임(결제/분쟁/이체/취소)을 점검·재시도·완료 처리하고
+ * 실행 결과 요약(ReconciliationSummary)을 남긴다.
+ */
 import type { StripePayments } from "../app.js";
 import type { CommandContext, MoneyKind, Repository } from "../repository.js";
 

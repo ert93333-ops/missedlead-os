@@ -1,3 +1,7 @@
+/**
+ * 고객 플로우 E2E: 연락처 마스킹, 랭킹/탐색 결정성, 견적 선택·결제 게이트 등.
+ * 일부는 서버 유닛 성격 테스트를 포함한다.
+ */
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";

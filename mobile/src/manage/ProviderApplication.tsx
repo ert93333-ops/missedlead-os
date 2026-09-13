@@ -1,3 +1,6 @@
+/**
+ * 공급자 지원서 화면: 조직·연락처·카테고리·서비스 ZIP·라이선스/보험 정보 입력과 상태 표시.
+ */
 import { DateField } from './DateField';
 import { dollars, useRemote, useTask, words } from './state';
 import { useState } from 'react';

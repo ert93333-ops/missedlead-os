@@ -1,3 +1,6 @@
+/**
+ * 네이티브용 API/Supabase URL 해석. loopback 호스트 판별과 EXPO_PUBLIC_* env 처리.
+ */
 import { z } from 'zod';
 
 const loopbackHost = (hostname: string) =>

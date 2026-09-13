@@ -1,3 +1,6 @@
+/**
+ * 데모 로그인 라우트의 모드·자격증명·env 검증 테스트.
+ */
 import express from 'express';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';

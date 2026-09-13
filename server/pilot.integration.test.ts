@@ -1,3 +1,6 @@
+/**
+ * 파일럿 시나리오 통합 테스트(로컬 Supabase 필요).
+ */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import request from "supertest";
@@ -194,12 +197,14 @@ suite(`payment-disabled pilot integration${missing.length ? ` (missing ${missing
     expect(me.body.actor).toMatchObject({ id: forgedUser.data.user.id, role: "customer" });
     const removedOperator = await service.from("operator_allowlist").delete().eq("user_id", operatorId);
     if (removedOperator.error) throw removedOperator.error;
+    let restoreError: unknown = null;
     try {
       await request(app).get("/api/me").set(authHeader(env.SUPABASE_TEST_OPERATOR_TOKEN)).expect(403, { error: "operator_not_allowlisted" });
     } finally {
       const restoredOperator = await service.from("operator_allowlist").upsert({ user_id: operatorId });
-      if (restoredOperator.error) throw restoredOperator.error;
+      restoreError = restoredOperator.error;
     }
+    if (restoreError) throw restoreError;
     const deletion = await service.auth.admin.deleteUser(revocable.data.user.id);
     if (deletion.error) throw deletion.error;
     createdAuthIds.delete(revocable.data.user.id);

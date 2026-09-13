@@ -1,3 +1,7 @@
+/**
+ * 안전 하한선 강제. 텍스트 패턴으로 gas/fire/electrical/structural/flooding 위험을 탐지해
+ * 모델이 놓친 위험을 emergency로 격상한다(enforceSafetyFloor).
+ */
 import type { IntakeLocale, ModelAssessment } from "./types.js";
 
 type Hazard = ModelAssessment["safety"]["hazards"][number];

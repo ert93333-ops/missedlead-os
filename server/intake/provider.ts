@@ -1,3 +1,7 @@
+/**
+ * Gemini 인테이크 프로바이더. 모델 호출, 응답 스키마 검증, 타임아웃/네트워크 오류 분류.
+ * IntakeProviderUnavailableError로 fail-soft 처리한다.
+ */
 import { refineRemoteAssessment } from './remoteAssessment.js';
 import { diagnosticContext } from './diagnosticContext.js';
 import { createPartFromUri, FileState, GoogleGenAI, type Part } from "@google/genai";

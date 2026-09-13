@@ -1,3 +1,6 @@
+/**
+ * 웹 방문 일시 입력(datetime-local), 미래 시각만 유효.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Action, palette, styles } from '../chat/ui';

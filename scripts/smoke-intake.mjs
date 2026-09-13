@@ -1,3 +1,6 @@
+/**
+ * 로컬 API 스모크: --live-ai 플래그로 실제 모델 2회 호출까지 검증.
+ */
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 

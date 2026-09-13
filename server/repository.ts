@@ -1,3 +1,8 @@
+/**
+ * 레거시 인메모리 repository: 요청/견적/변경/작업/분쟁/증빙/결제/감사 도메인 로직과
+ * 명령 디스패치. Supabase RPC로 대체 진행 중이며 테스트·레거시 라우트가 사용한다.
+ * 견적 랭킹(compositeQuoteScore), 15% 탐색 선택, Stripe 금액 검증 유틸 포함.
+ */
 import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export const STRIPE_MAX_CENTS = 99_999_999n;

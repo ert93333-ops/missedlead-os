@@ -1,3 +1,7 @@
+/**
+ * Vite 설정: React 플러그인, /api 프록시(WECOVER_API_URL로 변경 가능),
+ * /supa same-origin Supabase 프록시(터널 등 공개 호스트 대응), trycloudflare 호스트 허용.
+ */
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 

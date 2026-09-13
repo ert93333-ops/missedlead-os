@@ -1,3 +1,8 @@
+/**
+ * 고객 접수 채팅 UI의 핵심. 메시지 송수신, 미디어 첨부, AI 후보 이슈 카드,
+ * 안전 질문 게이팅, 가안 범위 확인 폼, EN/ES 번역을 처리한다.
+ * localStorage에 진행 상태를 저장해 새로고침 후에도 복원한다.
+ */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
 import { WarningIcon } from "../icons";

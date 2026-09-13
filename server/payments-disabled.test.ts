@@ -1,3 +1,6 @@
+/**
+ * PAYMENTS_MODE=disabled 시 전 결제 경로 fail-closed 테스트.
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp, InMemoryRepository, SupabaseJwtAuthAdapter } from "./app.js";

@@ -1,3 +1,7 @@
+/**
+ * 공유 UI 토큰/스타일 프록시와 AppIcon. styles·palette를 현재 역할 스킨으로 연결해
+ * 기존 호출부 수정 없이 역할 테마가 적용된다.
+ */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';

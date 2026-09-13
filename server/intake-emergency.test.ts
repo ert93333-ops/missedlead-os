@@ -1,3 +1,6 @@
+/**
+ * emergency 차단·안내·감사 기록 테스트.
+ */
 import { describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';

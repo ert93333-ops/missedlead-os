@@ -1,3 +1,6 @@
+/**
+ * diagnosticContext 지식 매칭/폴백 모드 테스트.
+ */
 import { describe, it, expect } from 'vitest';
 import { diagnosticContext } from './intake/diagnosticContext.js';
 import type { AnalyzeInput } from './intake/types.js';

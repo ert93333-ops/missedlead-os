@@ -1,7 +1,8 @@
 /**
- * API 프로세스 엔트리. .env.local/.env 로드 후 app.listen(PORT, 기본 8787).
+ * API 프로세스 엔트리. .env.local/.env 로드 후 app.listen(기본 8787).
  * 배포 매니페스트 검증과 백그라운드 잡(견적 확장, 결제 리컨실)을 시작한다.
- * 주의: dotenv override가 .env.local의 PORT를 우선 적용한다.
+ * 주의: dotenv override가 .env.local의 PORT를 우선 적용하므로, 포트를 바꾸려면
+ * .env.local에 없는 API_PORT를 사용한다(예: 다른 로컬 서비스가 8787을 점유할 때).
  */
 import { config } from 'dotenv'
 import { createApp } from './app.js'
@@ -11,7 +12,7 @@ import { startQuoteExpansion } from './jobs/expandQuotes.js'
 
 config({ path: ['.env.local', '.env'], quiet: true, override: process.env.NODE_ENV !== 'production' })
 
-const port = Number(process.env.PORT ?? 8787)
+const port = Number(process.env.API_PORT ?? process.env.PORT ?? 8787)
 let deploymentManifest: unknown
 try {
   deploymentManifest = process.env.DEPLOYMENT_MANIFEST_JSON

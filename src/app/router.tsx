@@ -46,9 +46,10 @@ function AuthGate({ auth }: { auth: AuthValue }) {
       <p className="eyebrow">WECOVER HOME REPAIR</p>
       <h1>Sign in to save<br/><em>your repair request.</em></h1>
       <p>{message}</p>
-      <form onSubmit={(event) => { event.preventDefault(); const email = new FormData(event.currentTarget).get("email")?.toString() ?? ""; void signIn(email).then(() => setMessage("Check your email for the sign-in link.")).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Sign-in request failed.")); }}>
+      <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const email = form.get("email")?.toString() ?? ""; const password = form.get("password")?.toString() ?? ""; void signIn(email, password || undefined).then(() => setMessage(password ? "Signing you in…" : "Check your email for the sign-in link.")).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Sign-in request failed.")); }}>
         <label>Email address<input name="email" type="email" required autoComplete="email" /></label>
-        <button className="primary">Send sign-in link</button>
+        <label>Password <span className="auth-hint">leave blank for a sign-in link</span><input name="password" type="password" autoComplete="current-password" /></label>
+        <button className="primary">Sign in</button>
       </form>
       <ul className="auth-trust">
         <li><ShieldCheckIcon size={15}/>Licensed and insured local pros, verified by our operations team</li>

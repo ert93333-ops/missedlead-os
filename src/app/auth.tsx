@@ -7,14 +7,20 @@ export type AuthValue = {
   actor: Actor | null;
   accessToken: string | null;
   loading: boolean;
-  signIn: (email: string) => Promise<void>;
+  signIn: (email: string, password?: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectDemoActor?: (role: Role) => void;
 };
 
 const roles = new Set<Role>(["customer", "provider", "operator"]);
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// A loopback Supabase URL is unreachable when the app is served from a public
+// host (tunnels, phones, other devices); route through the same-origin /supa
+// proxy instead.
+const onLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const isLoopback = envUrl !== undefined && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(envUrl);
+const url = envUrl && isLoopback && !onLocalHost ? `${window.location.origin}/supa` : envUrl;
 const supabase = url && key ? createClient(url, key) : null;
 const demoAuthEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_AUTH === "true";
 
@@ -46,8 +52,13 @@ export function AuthProvider({ children }: { children: (auth: AuthValue) => Reac
     actor: demo?.actor ?? actorFromSession(session),
     accessToken: demo?.accessToken ?? session?.access_token ?? null,
     loading,
-    signIn: async (email) => {
+    signIn: async (email, password) => {
       if (!supabase) throw new Error("Supabase environment configuration is required.");
+      if (password) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        return;
+      }
       const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
       if (error) throw error;
     },

@@ -106,8 +106,13 @@ controls remain dev-only (`import.meta.env.DEV` or `VITE_ENABLE_DEMO_AUTH`).
 - `pnpm build` — pass
 - `pnpm lint` — pass (0 errors; warnings are pre-existing `set-state-in-effect`
   items plus one unused test import)
-- `pnpm exec playwright test` — 13 passed, 1 skipped (Supabase credential
-  dependent)
+- `pnpm exec playwright test` — 16 passed, 1 skipped (Supabase credential
+  dependent); `tests/e2e/permit-flow.spec.ts` covers the provider
+  permit-required itemized quote + permit recording, the read-only customer
+  permit panel, and the operator verification queue
+- `PermitPanel` gained a `readonly` mode so customers see county permit /
+  inspection status on their request without the recording form (which only
+  providers and operators may submit)
 - Visual review — sign-in, customer intake, provider queue, operator console
   screenshotted via preview server (see `artifacts/redesign-*.png`); error
   notice tone verified against a real fetch failure on the API-less preview.

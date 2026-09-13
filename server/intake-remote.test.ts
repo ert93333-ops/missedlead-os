@@ -2,7 +2,6 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp, InMemoryRepository, type AuthAdapter } from "./app.js";
 import {
-  IntakeProviderResponseError,
   IntakeProviderUnavailableError,
   type IntakeAiProvider,
 } from "./intake/provider.js";

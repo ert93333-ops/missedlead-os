@@ -2,11 +2,11 @@ import { DateField } from './DateField';
 import { Activity } from '../requests/Activity';
 import { ProviderCommunication } from './ProviderCommunication';
 import { dollars, useRemote, useTask, words } from './state';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { z } from 'zod';
 import { parseMoney, parseDateInput } from './formValues';
-import { post } from '../platform/api';
+import { post, put } from '../platform/api';
 import { Action, Check, styles } from '../chat/ui';
 import { pickMedia } from '../chat/media';
 import { multipart } from '../chat/api';
@@ -17,6 +17,8 @@ const requestSchema = z.object({ id: z.string(), description: z.string(), addres
 const dashboard = z.object({ requests: z.array(requestSchema), evidence: z.array(z.object({ id: z.string(), requestId: z.string(), kind: z.enum(providerEvidenceKinds), note: z.string() })), quotes: z.array(z.object({ id: z.string(), requestId: z.string(), providerId: z.string(), amountCents: z.number() })) });
 const resultSchema = z.object({}).passthrough();
 const bundlesSchema = z.object({ bundles: z.array(z.object({ id: z.string(), primary_request_id: z.string(), status: z.string(), scope_snapshot: z.array(z.object({ requestId: z.string(), description: z.string() }).passthrough()) })) });
+const permitSchema = z.object({ permit: z.object({ request_id: z.string(), permit_number: z.string(), inspection_status: z.string(), verified: z.boolean(), verification_reference: z.string().nullable(), updated_at: z.string() }).nullable() });
+const quoteDetailsSchema = z.object({ details: z.array(z.object({ permit_required: z.boolean() })) });
 export function ProviderJobs(props: ManagementProps) {
   const { locale, accessToken: token } = props; const t = (en: string, es: string) => words(locale, en, es); const remote = useRemote('/api/dashboard', token, dashboard, locale); const [selected, setSelected] = useState('');
   const item = remote.data?.requests.find(value => value.id === selected);
@@ -47,9 +49,30 @@ function JobDetail(props: ManagementProps & { readonly item: z.infer<typeof requ
   return <Screen {...props} title={item.description}><Text style={styles.body}>{item.address}</Text><Text style={styles.muted}>{t('Job status', 'Estado del trabajo')}: {item.status.replaceAll('_', ' ')}</Text>{task.feedback}
     {['matched', 'quoted'].includes(item.status) && <Section title={t('Invitation to quote', 'Invitación a presupuestar')}><Text style={styles.muted}>{t('Accepting this invitation does not book or charge the customer.', 'Aceptar esta invitación no reserva el trabajo ni cobra al cliente.')}</Text>{(['accept', 'decline'] as const).map(decision => <Action key={decision} disabled={task.busy} label={decision === 'accept' ? t('Accept invitation', 'Aceptar invitación') : t('Decline invitation', 'Rechazar invitación')} onPress={() => void task.run(async () => { await post(`/api/providers/requests/${item.id}/respond`, token, z.object({ match: z.object({}).passthrough() }), { decision }); await refresh(); }, t('Response recorded.', 'Respuesta registrada.'))} />)}{actorId.length > 0 && !hasProviderQuote(item.id, actorId, data.quotes) && <Action label={t('Prepare itemized quote', 'Preparar presupuesto detallado')} onPress={() => setQuote(true)} />}</Section>}
     {item.status === 'funded' && <Action primary disabled={task.busy} label={t('Start work', 'Comenzar trabajo')} onPress={() => action('start')} />}
+    <PermitSection {...props} requestId={item.id} />
     <Activity accessToken={token} requestId={item.id} locale={locale} revision={data} /><ProviderCommunication {...props} requestId={item.id} status={item.status} /><Section title={t('Work evidence', 'Pruebas del trabajo')}><Text style={styles.muted}>{t('Record the condition before and after work. Add photos or video with the customer’s consent.', 'Registra el estado antes y después del trabajo. Añade fotos o video con el consentimiento del cliente.')}</Text>{providerEvidenceKinds.map(value => <Text key={`status-${value}`} style={styles.body}>{readiness.kinds[value] ? '✓' : '○'} {evidenceLabel(value)} · {value === 'before' || value === 'after' ? (readiness.kinds[value] ? t('Required — added', 'Obligatoria — añadida') : t('Required — missing', 'Obligatoria — falta')) : (readiness.kinds[value] ? t('Optional — added', 'Opcional — añadida') : t('Optional — not added', 'Opcional — no añadida'))}</Text>)}{data.evidence.filter(value => value.requestId === item.id).map(value => <Text key={value.id} style={styles.body}>{evidenceLabel(value.kind)} · {value.note}</Text>)}{providerEvidenceKinds.map(value => <Action key={value} primary={kind === value} label={evidenceLabel(value)} onPress={() => setKind(value)} />)}<Field label={t('Describe this evidence', 'Describe esta prueba')} value={note} onChange={setNote} multiline />{files.map(file => <Text key={file.uri} style={styles.muted}>{file.name}</Text>)}<Action disabled={task.busy} label={t('Take evidence photo', 'Tomar foto como prueba')} onPress={() => void task.run(async () => setFiles(await pickMedia('camera', files)))} /><Action disabled={task.busy} label={t('Choose photos or video', 'Elegir fotos o video')} onPress={() => void task.run(async () => setFiles(await pickMedia('library', files)))} /><Action disabled={task.busy || evidenceSubmitting.current || note.trim().length < 3} label={t('Save work evidence', 'Guardar prueba del trabajo')} onPress={submitEvidence} /></Section>
     {item.status === 'in_progress' && <><Text style={styles.muted}>{readiness.completionReady ? t('Required before and after evidence is ready. Completion does not settle payment.', 'Las pruebas obligatorias de antes y después están listas. La finalización no liquida el pago.') : t('Before and after evidence are required to finish. Completion does not settle payment.', 'Se requieren pruebas de antes y después para finalizar. La finalización no liquida el pago.')}</Text><Action primary disabled={task.busy || !readiness.completionReady} label={t('Mark work completed', 'Marcar trabajo terminado')} onPress={() => action('complete')} /></>}
   </Screen>;
+}
+function PermitSection(props: ManagementProps & { readonly requestId: string }) {
+  const { locale, accessToken: token, requestId } = props; const t = (en: string, es: string) => words(locale, en, es);
+  const permit = useRemote(`/api/requests/${requestId}/permit`, token, permitSchema, locale);
+  const details = useRemote(`/api/requests/${requestId}/quote-details`, token, quoteDetailsSchema, locale);
+  const task = useTask(locale);
+  const [number, setNumber] = useState(''); const [status, setStatus] = useState<'pending' | 'passed' | 'failed'>('pending');
+  const existing = permit.data?.permit ?? null;
+  useEffect(() => { if (existing && !number) setNumber(existing.permit_number); }, [existing, number]);
+  const required = (details.data?.details ?? []).some(value => value.permit_required);
+  if (!required && !existing) return <>{permit.feedback}{details.feedback}</>;
+  const inspectionLabel = (value: string) => value === 'passed' ? t('passed', 'aprobada') : value === 'failed' ? t('failed', 'fallida') : t('pending', 'pendiente');
+  return <Section title={t('Permit and inspection', 'Permiso e inspección')}>
+    {permit.feedback}{details.feedback}{task.feedback}
+    {existing ? <Text style={styles.body}>{t('Permit', 'Permiso')} {existing.permit_number} · {t('Inspection', 'Inspección')}: {inspectionLabel(existing.inspection_status)} · {existing.verified ? t('Verified by operations', 'Verificado por operaciones') : t('Awaiting operations verification', 'Pendiente de verificación de operaciones')}</Text>
+      : <Text style={styles.muted}>{t('A quote for this job requires a permit. Record the permit number here; operations must verify it before work can start or finish.', 'Un presupuesto de este trabajo requiere permiso. Registra el número aquí; operaciones debe verificarlo antes de comenzar o terminar el trabajo.')}</Text>}
+    <Field label={t('Permit number', 'Número de permiso')} value={number} onChange={setNumber} />
+    <View style={styles.row}>{(['pending', 'passed', 'failed'] as const).map(value => <Action key={value} primary={status === value} label={`${t('Inspection', 'Inspección')}: ${inspectionLabel(value)}`} onPress={() => setStatus(value)} />)}</View>
+    <Action primary disabled={task.busy || number.trim().length < 2} label={t('Save permit record', 'Guardar registro de permiso')} onPress={() => void task.run(async () => { await put(`/api/requests/${requestId}/permit`, token, z.object({ permit: z.object({}).passthrough() }), { permitNumber: number.trim(), inspectionStatus: status }); await permit.reload(); }, t('Permit recorded. Operations will verify it.', 'Permiso registrado. Operaciones lo verificará.'))} />
+  </Section>;
 }
 function QuoteEditor(props: ManagementProps & { readonly item: z.infer<typeof requestSchema> }) {
   const { locale, accessToken: token, item } = props; const t = (en: string, es: string) => words(locale, en, es); const task = useTask(locale); const care = useRemote('/api/care', token, bundlesSchema, locale);

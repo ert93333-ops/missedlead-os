@@ -1,6 +1,6 @@
 import type { Express, Request } from 'express';
 import { z } from 'zod';
-import { featureClient, featureError, featureService, FeatureError } from '../context.js';
+import { featureActor, featureClient, featureError, featureService, FeatureError } from '../context.js';
 
 const id = z.string().uuid();
 export async function accessibleRequest(req: Request, requestId: string) {
@@ -14,6 +14,8 @@ const message = z.object({ id, request_id: id, sender_id: id, body: z.string(), 
 const schedule = z.object({ id, request_id: id, starts_at: z.string(), time_zone: z.string(), status: z.string(), changed_at: z.string(), changed_by: id.nullable() });
 const evidence = z.object({ id, request_id: id, kind: z.string(), storage_path: z.string(), created_at: z.string() });
 const media = z.object({ evidence_id: id, file_name: z.string(), content_type: z.string(), size_bytes: z.coerce.number(), object_path: z.string(), note: z.string() });
+const permitView = z.object({ request_id: id, permit_number: z.string(), inspection_status: z.string(), verified: z.boolean(), verification_reference: z.string().nullable(), verified_by: id.nullable(), updated_at: z.string() });
+const opsPermitView = permitView.extend({ service_requests: z.object({ description: z.string(), address: z.string() }).nullable() });
 
 export function registerActivityRoutes(app: Express) {
   app.get('/api/requests/:id/activity', async (req, res) => {
@@ -60,6 +62,23 @@ export function registerActivityRoutes(app: Express) {
       const { data, error } = await featureClient(req).rpc('record_job_permit', { p_request: id.parse(req.params.id), p_number: input.permitNumber, p_inspection: input.inspectionStatus, p_reference: input.verificationReference ?? null }).single();
       if (error) throw error;
       return res.json({ permit: data });
+    } catch (error) { return featureError(res, error); }
+  });
+  app.get('/api/requests/:id/permit', async (req, res) => {
+    try {
+      const requestId = id.parse(req.params.id);
+      const client = await accessibleRequest(req, requestId);
+      const { data, error } = await client.from('job_permits').select('*').eq('request_id', requestId).maybeSingle();
+      if (error) throw error;
+      return res.json({ permit: data ? permitView.parse(data) : null });
+    } catch (error) { return featureError(res, error); }
+  });
+  app.get('/api/ops/permits', async (req, res) => {
+    try {
+      if (featureActor(res).role !== 'operator') throw new FeatureError(403, 'operator_required');
+      const { data, error } = await featureClient(req).from('job_permits').select('*,service_requests(description,address)').order('updated_at', { ascending: false }).limit(200);
+      if (error) throw error;
+      return res.json({ permits: z.array(opsPermitView).parse(data) });
     } catch (error) { return featureError(res, error); }
   });
 }

@@ -45,9 +45,9 @@ test("operator resolves evidence-backed dispute, refunds, and sees immutable aud
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("demo-operator").click();
   await expect(page.getByTestId("operator-console")).toBeVisible();
-  await expect(page.getByText("internal · After photo shows a persistent leak")).toBeVisible();
+  await expect(page.getByText("internal · open · After photo shows a persistent leak")).toBeVisible();
   await expect(page.getByTestId("audit-log")).toContainText("evidence.submitted");
-  await page.getByRole("button", { name: "Resolve" }).click();
+  await page.getByRole("button", { name: "Resolve", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Dispute resolved");
   await expect(page.getByTestId("audit-log")).toContainText("dispute.resolved");
   await page.getByLabel("Refund amount USD").fill("25");

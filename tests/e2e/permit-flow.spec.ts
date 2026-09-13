@@ -98,6 +98,7 @@ test("operator verifies a permit record from the queue with a verification refer
     expect(req.headers().authorization).toMatch(/^Bearer demo\./);
     if (path === "/api/dashboard" && req.method() === "GET") return json(blank());
     if (path === "/api/ops/permits" && req.method() === "GET") return json({ permits: [permit] });
+    if (path === "/api/ops/recovery" && req.method() === "GET") return json({ claims: [], receivables: [] });
     if (path === "/api/requests/req-9/permit" && req.method() === "PUT") {
       const body = req.postDataJSON() as { permitNumber: string; inspectionStatus: string; verificationReference: string };
       expect(body).toEqual({ permitNumber: "CLT-88", inspectionStatus: "pending", verificationReference: "county lookup A-1042" });

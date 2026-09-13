@@ -53,6 +53,8 @@ type Copy = {
   saveTranslation: string;
   reattach: string;
   remove: string;
+  examplesLabel: string;
+  examples: string[];
 };
 
 const copy: Record<IntakeLocale, Copy> = {
@@ -89,6 +91,8 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Save translation and continue",
     reattach: "For your privacy, attached files were not saved in this browser. Add them again before continuing.",
     remove: "Remove",
+    examplesLabel: "Not sure where to start? Try:",
+    examples: ["Water is leaking under my kitchen sink", "An outlet stopped working", "My AC is running but not cooling", "No hot water from the water heater"],
   },
   es: {
     title: "Cuéntenos qué pasó",
@@ -123,6 +127,8 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Guardar traducción y continuar",
     reattach: "Por su privacidad, los archivos adjuntos no se guardaron en este navegador. Agréguelos de nuevo antes de continuar.",
     remove: "Eliminar",
+    examplesLabel: "¿No sabe por dónde empezar? Pruebe:",
+    examples: ["Hay una fuga de agua bajo el fregadero", "Un enchufe dejó de funcionar", "El aire acondicionado no enfría", "No sale agua caliente"],
   },
 };
 
@@ -338,6 +344,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
 
     <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions">
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
+      {messages.length === 0 && !assessment && <div className="prompt-chips"><span>{text.examplesLabel}</span>{text.examples.map((example) => <button type="button" key={example} onClick={() => setDraft(example)}>{example}</button>)}</div>}
       {messages.map((message, index) => <div className={`chat-message chat-message--${message.role}`} key={`${message.role}-${index}`}><span className="chat-message__sender">{message.role === "assistant" ? "WeCover" : locale === "es" ? "Usted" : "You"}</span><p>{message.content}</p><button type="button" className="translate-message" onClick={() => void translateMessage(index, message)} disabled={translatingIndex === index}>{translatingIndex === index ? text.translating : translations[index] && !hiddenTranslations.includes(index) ? (locale === "es" ? "Ocultar traducción" : "Hide translation") : text.translate}</button>{translations[index] && !hiddenTranslations.includes(index) && <div className="translation" lang={translations[index].targetLocale}><strong>{translations[index].targetLocale === "es" ? "Español" : "English"}</strong><p>{translations[index].translated}</p><small>{translations[index].warning}</small></div>}</div>)}
       {busy && <div className="chat-message chat-message--assistant chat-message--thinking" aria-label={locale === "es" ? "Analizando" : "Analyzing"}><span/><span/><span/></div>}
 

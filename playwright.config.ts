@@ -5,6 +5,7 @@ const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 300_000,
+  globalSetup: './tests/e2e/global-setup.ts',
   workers: 1,
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5191',

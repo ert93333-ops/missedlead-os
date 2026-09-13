@@ -49,6 +49,7 @@ function AuthGate({ auth }: { auth: AuthValue }) {
         <label>Email address<input name="email" type="email" required autoComplete="email" /></label>
         <button className="primary">Send sign-in link</button>
       </form>
+      {auth.selectDemoActor && <div className="demo-actors" data-testid="demo-actor-selector"><strong>Demo access · local only</strong>{(["customer", "provider", "operator"] as const).map((role) => <button key={role} type="button" data-testid={`demo-${role}`} onClick={() => auth.selectDemoActor?.(role)}>{role}</button>)}</div>}
     </section>
   </main>;
 }

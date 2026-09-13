@@ -34,6 +34,7 @@ test("operator resolves evidence-backed dispute, refunds, and sees immutable aud
       return route.fulfill({json:req.postDataJSON()});
     }
     if (path === "/api/ops/recovery" && req.method() === "GET") return route.fulfill({json:{claims:[{claimId:"claim-stuck",kind:"settlement"}],receivables:[{id:"recv-1",amountCents:1200,reason:"partial reversal"}]}});
+    if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({json:{permits:[]}});
     if (path === "/api/ops/recovery/receivables/recv-1/resolve" && req.method() === "POST") return route.fulfill({json:{id:"recv-1",status:"resolved"}});
     throw new Error(`Unexpected operator API request: ${req.method()} ${path}`);
   });

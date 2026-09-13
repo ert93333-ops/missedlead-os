@@ -23,6 +23,7 @@ test("72-hour hold rejects preflight and performs no settlement", async ({ page 
       preflights += 1; expect(req.postDataJSON()).toEqual({});
       return route.fulfill({ status: 409, json: { error: "dispute_window_open", guidance: "The 72-hour protection period has not ended yet." } });
     }
+    if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({ json: { permits: [] } });
     throw new Error(`Hold allowed forbidden API request: ${req.method()} ${path}`);
   });
   await openOperator(page);
@@ -51,6 +52,7 @@ test("exact 72-hour boundary authorizes one idempotent settlement", async ({ pag
       phase = "settled"; request.status = "settled"; Object.assign(job, { settledAt: "2026-09-04T00:00:00.000Z" });
       return route.fulfill({ status: 201, json: { state: "completed", transferAmountCents: 9000 } });
     }
+    if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({ json: { permits: [] } });
     throw new Error(`Unexpected settlement API request: ${req.method()} ${path}`);
   });
   await openOperator(page);

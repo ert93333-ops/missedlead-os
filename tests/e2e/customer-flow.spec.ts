@@ -242,6 +242,9 @@ test("customer full flow renders every role and enforces lifecycle API contracts
       expect(phase).not.toBe("empty");
       return fulfill(route,200,{media:[{id:"media-1",fileName:"intake.webm",contentType:"audio/webm",sizeBytes:3,url:"data:audio/webm;base64,AQID",expiresInSeconds:60}]});
     }
+    if (url === "/api/requests/req-1/quote-details" && request.method() === "GET") return fulfill(route,200,{details:[]});
+    if (url === "/api/requests/req-1/permit" && request.method() === "GET") return fulfill(route,200,{permit:null});
+    if (url === "/api/ops/permits" && request.method() === "GET") return fulfill(route,200,{permits:[]});
     if (url === "/api/providers/requests/req-1/quote" && request.method() === "POST") {
       expect(phase).toBe("matched");
       const submitted = request.postDataJSON() as { scope: string; diagnosticCents: number; laborCents: number; materialsCents: number; taxCents: number; totalCents: number; validUntil: string; earliestStartAt: string; warrantyDays: number; siteVisitRequired: boolean; permitRequired: boolean; inspectionStatus: string };

@@ -18,7 +18,7 @@ export function AccountScreen({ accessToken, locale, onBack }: { readonly access
     try { await action(); setNotice(success); } catch (error) { setNotice(error instanceof Error ? error.message : es ? 'No se pudo guardar.' : 'Could not save.'); }
     finally { setBusy(false); }
   }
-  return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+  return <ScrollView style={styles.safe} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <Action label={es ? 'Volver' : 'Back'} onPress={onBack}/><Text style={styles.title}>{es ? 'Sus propiedades y privacidad' : 'Your properties and privacy'}</Text>
     {properties.map(item => <View key={item.id} style={styles.bubble}><Text style={styles.heading}>{item.label}</Text><Text style={styles.body}>{item.address}</Text></View>)}
     <TextInput style={styles.input} accessibilityLabel={es ? 'Nombre de la propiedad' : 'Property name'} placeholder={es ? 'Nombre de la propiedad' : 'Property name'} value={label} onChangeText={setLabel}/>

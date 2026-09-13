@@ -57,7 +57,7 @@ export function RequestsScreen({ accessToken, locale, onBack }: { readonly acces
   const request = data?.requests.find((v) => v.id === selected);
   const job = data?.jobs.find((v) => v.requestId === selected);
   const paymentReady = payments;
-  return <View style={styles.flex}>
+  return <View style={[styles.flex, styles.safe]}>
     <View style={styles.header}><Action label={selected ? t('All requests', 'Todas las solicitudes') : t('Back to chat', 'Volver al chat')} onPress={() => selected ? setSelected(undefined) : onBack()} /><Text style={styles.title}>{t('Your requests', 'Tus solicitudes')}</Text></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Action label={t('Refresh', 'Actualizar')} disabled={busy} onPress={() => { setBusy(true); void Promise.all([refresh(), selected ? refreshActivity(selected) : Promise.resolve()]).catch((error: unknown) => setNotice(errorMessage(error, locale))).finally(() => setBusy(false)); }} />

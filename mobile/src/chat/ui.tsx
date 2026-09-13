@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { activeRoleName, activeTokens, font, skin, type SkinRole, type SkinTokens } from '../theme';
-type IconName = 'chevron-back' | 'ellipsis-horizontal' | 'add' | 'close' | 'arrow-up' | 'chatbubble-ellipses-outline' | 'list-outline' | 'briefcase-outline' | 'person-circle-outline' | 'language-outline';
+export type IconName = 'chevron-back' | 'ellipsis-horizontal' | 'add' | 'close' | 'arrow-up' | 'chatbubble-ellipses-outline' | 'list-outline' | 'briefcase-outline' | 'person-circle-outline' | 'language-outline' | 'water-outline' | 'thermometer-outline' | 'flash-outline' | 'home-outline' | 'warning-outline' | 'construct-outline' | 'cube-outline' | 'shield-check-outline';
 
 const buildStyles = (t: SkinTokens) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: t.background }, flex: { flex: 1 }, grow: { flex: 1 },
@@ -34,6 +34,8 @@ const buildStyles = (t: SkinTokens) => StyleSheet.create({
   questionBubble: { paddingHorizontal: 18, paddingVertical: 17, gap: 7, backgroundColor: t.surface, borderRadius: t.radius + 2, borderWidth: 1, borderColor: t.line, maxWidth: '96%', alignSelf: 'flex-start', shadowColor: t.shadow, shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   section: { gap: 12, paddingVertical: 10 },
   resultCard: { gap: 12, marginTop: 8, padding: 16, backgroundColor: t.surface, borderRadius: t.radius, borderWidth: 1, borderColor: t.line },
+  issueHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  issueIconTile: { width: 36, height: 36, borderRadius: t.radiusSm + 2, backgroundColor: t.accentSoft, borderWidth: 1, borderColor: t.line, alignItems: 'center', justifyContent: 'center' },
   estimateCard: { gap: 10, marginTop: 4, padding: 16, backgroundColor: t.okSoft, borderRadius: t.radius, borderWidth: 1, borderColor: t.ok },
   separator: { borderTopWidth: 1, borderTopColor: t.line, paddingTop: 16 },
   warning: { padding: 16, backgroundColor: t.warnSoft, borderRadius: t.radiusSm, gap: 8 },
@@ -102,6 +104,14 @@ export function AppIcon({ name, size = 22, color = palette.text }: { readonly na
     'briefcase-outline': <Path d="M4 8.5h16v10H4zM8 8.5V6h8v2.5M4 13h16M10 13v2h4v-2" {...stroke}/>,
     'person-circle-outline': <><Circle cx="12" cy="12" r="8.5" {...stroke}/><Circle cx="12" cy="9.5" r="2.4" {...stroke}/><Path d="M7.8 17.2a4.8 4.8 0 0 1 8.4 0" {...stroke}/></>,
     'language-outline': <><Circle cx="12" cy="12" r="8.5" {...stroke}/><Path d="M3.8 12h16.4M12 3.5c2.2 2.3 3.3 5.1 3.3 8.5S14.2 18.2 12 20.5c-2.2-2.3-3.3-5.1-3.3-8.5S9.8 5.8 12 3.5Z" {...stroke}/></>,
+    'water-outline': <><Path d="M12 3s6.5 6.6 6.5 11a6.5 6.5 0 0 1-13 0C5.5 9.6 12 3 12 3Z" {...stroke}/><Path d="M9.5 14a2.5 2.5 0 0 0 2.5 2.5" {...stroke}/></>,
+    'thermometer-outline': <><Path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4.5 4.5 0 1 1-4 0Z" {...stroke}/><Path d="M12 10v7" {...stroke}/><Circle cx="12" cy="18" r="1.2" fill={color}/></>,
+    'flash-outline': <Path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13L13 2Z" {...stroke}/>,
+    'home-outline': <><Path d="m3 11 9-8 9 8" {...stroke}/><Path d="M5.5 9.5V20h13V9.5" {...stroke}/><Path d="M10 20v-5h4v5" {...stroke}/></>,
+    'warning-outline': <><Path d="M12 3.5 2.5 20h19L12 3.5Z" {...stroke}/><Path d="M12 10v4.5" {...stroke}/><Circle cx="12" cy="17.3" r="0.4" fill={color}/></>,
+    'construct-outline': <Path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7Z" {...stroke}/>,
+    'cube-outline': <><Path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" {...stroke}/><Path d="M4 7.5 12 12l8-4.5M12 12v9" {...stroke}/></>,
+    'shield-check-outline': <><Path d="M12 3 5 5.8v5.4c0 4.4 2.9 7.4 7 9.3 4.1-1.9 7-4.9 7-9.3V5.8L12 3Z" {...stroke}/><Path d="m9 11.5 2.2 2.2L15.4 9.5" {...stroke}/></>,
   };
   return <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityElementsHidden>{paths[name]}</Svg>;
 }

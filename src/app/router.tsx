@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { type AuthValue, type Role } from "./auth";
+import { LockIcon, MessageIcon, ReceiptIcon, ShieldCheckIcon } from "./icons";
 
 const paths: Record<Role, string> = { customer: "/customer", provider: "/provider", operator: "/operator" };
 
@@ -50,10 +51,10 @@ function AuthGate({ auth }: { auth: AuthValue }) {
         <button className="primary">Send sign-in link</button>
       </form>
       <ul className="auth-trust">
-        <li>Licensed and insured local pros, verified by our operations team</li>
-        <li>Itemized quotes compared side by side — not just the cheapest</li>
-        <li>20% deposit and a 72-hour review window before final payment</li>
-        <li>Bilingual support — English and Spanish</li>
+        <li><ShieldCheckIcon size={15}/>Licensed and insured local pros, verified by our operations team</li>
+        <li><ReceiptIcon size={15}/>Itemized quotes compared side by side — not just the cheapest</li>
+        <li><LockIcon size={15}/>20% deposit and a 72-hour review window before final payment</li>
+        <li><MessageIcon size={15}/>Bilingual support — English and Spanish</li>
       </ul>
       {auth.selectDemoActor && <div className="demo-actors" data-testid="demo-actor-selector"><strong>Demo access · local only</strong>{(["customer", "provider", "operator"] as const).map((role) => <button key={role} type="button" data-testid={`demo-${role}`} onClick={() => auth.selectDemoActor?.(role)}>{role}</button>)}</div>}
     </section>

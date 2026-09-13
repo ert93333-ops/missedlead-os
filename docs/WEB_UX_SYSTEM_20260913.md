@@ -50,6 +50,40 @@ states, and role differentiation rather than replacing it.
   buttons, inputs, and select elements.
 - `aria-current="step"` added to the stepper for assistive tech.
 
+### Iconography (added in second pass)
+
+A hand-drawn stroke icon set lives in `src/app/icons.tsx` (24×24 viewBox,
+`currentColor`, 1.8px stroke — consistent with the existing chat icons).
+It covers the home-services vocabulary: droplet (plumbing/leaks),
+thermometer (HVAC), bolt (electrical), house (structural/roof/walls),
+appliance, wrench (handyman/general), warning triangle (hazards),
+shield-check (verification), document (permits), calendar, receipt
+(quotes), camera (evidence), star, gauge, lock, message, check-circle,
+empty-box.
+
+- `src/app/issueIcon.ts` maps an issue-candidate label to an icon via
+  EN/ES keyword matching (gas/smoke/fire → warning, leak/pipe/drain →
+  droplet, ac/furnace/thermostat → thermometer, outlet/wire/breaker →
+  bolt, roof/wall/foundation/mold → house, appliances → appliance,
+  fallback → wrench). "What it might be" candidates and the confirm
+  checklist now show a tinted icon tile per candidate so homeowners can
+  recognize problem types at a glance.
+- Safety banners (`safety-guidance`, `danger-note`, `success-note`) carry
+  an inline status icon; the safety pill swaps its dot for shield/warning
+  glyphs.
+- Every panel kicker shows a small semantic icon instead of the bare
+  accent dash (quotes → receipt, schedule → calendar, permits → document,
+  matching → gauge, eligibility/disputes → shield, evidence → camera).
+- Empty states render a centered outline cube; the payment dialog title
+  carries a lock; the sign-in trust list replaces plain checkmarks with
+  per-item icons (shield, receipt, lock, message).
+- The same vocabulary ships on mobile via the shared `AppIcon` set in
+  `mobile/src/chat/ui.tsx` (`water/thermometer/flash/home/warning/
+  construct/cube/shield-check` outline glyphs) and an
+  `issueIconName(label)` mapper in `AssessmentPanel.tsx`; issue
+  candidates get a 36px accent-tinted icon tile, and the emergency banner
+  leads with a warning glyph.
+
 ### Trust cues (sign-in)
 
 The auth gate gained a U.S.-market trust block above the card —

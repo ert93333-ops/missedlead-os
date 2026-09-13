@@ -3,7 +3,15 @@ import { Linking, Text, TextInput, View } from 'react-native';
 import { copy } from './copy';
 import { hasUnsentDetails } from './protocol';
 import type { Intake } from './useIntake';
-import { Action, Check, MotionView, styles } from './ui';
+import { Action, AppIcon, Check, MotionView, palette, styles, type IconName } from './ui';
+
+const issueIconName = (label: string): IconName =>
+  /gas|smoke|fire|flame|carbon|gasolina|humo|fuego/i.test(label) ? 'warning-outline'
+    : /leak|water|drain|faucet|toilet|pipe|sew|flood|sink|shower|plumb|fuga|agua|tuber|drenaje|inund/i.test(label) ? 'water-outline'
+      : /ac\b|air.?condition|hvac|heat|furnace|thermostat|cool|aire|calefac|clima/i.test(label) ? 'thermometer-outline'
+        : /electric|outlet|wire|wiring|breaker|power|light|switch|panel|corto|cable|eléctr|luz|enchufe/i.test(label) ? 'flash-outline'
+          : /roof|ceiling|wall|drywall|crack|foundation|structural|mold|techo|pared|grieta|moho|cimiento/i.test(label) ? 'home-outline'
+            : 'construct-outline';
 
 export function AssessmentPanel({ intake }: { readonly intake: Intake }) {
   const [referenceError, setReferenceError] = useState(false);
@@ -11,7 +19,7 @@ export function AssessmentPanel({ intake }: { readonly intake: Intake }) {
   const assessment = intake.assessment;
   if (!assessment) return null;
   if (assessment.safety.level === 'emergency') return <View style={styles.warning} accessibilityLiveRegion="assertive">
-    <Text style={styles.heading}>{text.emergency}</Text><Text style={styles.danger}>{assessment.safety.guidance}</Text><Text style={styles.body}>{text.emergencyHelp}</Text>
+    <View style={styles.issueHeader}><AppIcon name="warning-outline" size={22} color={palette.danger}/><Text style={styles.heading}>{text.emergency}</Text></View><Text style={styles.danger}>{assessment.safety.guidance}</Text><Text style={styles.body}>{text.emergencyHelp}</Text>
   </View>;
   return <View style={styles.section}>
     {assessment.safety.guidance ? <View style={styles.warning}><Text style={styles.body}>{assessment.safety.guidance}</Text></View> : null}
@@ -34,7 +42,7 @@ export function AssessmentPanel({ intake }: { readonly intake: Intake }) {
       <Text style={styles.sectionKicker}>{text.resultKicker}</Text>
       <Text style={styles.heading}>{text.possible}</Text><Text style={styles.muted}>{text.provisional}</Text>
       {assessment.issueCandidates.map(issue => <View key={issue.id} style={styles.separator}>
-        <Check label={issue.label} checked={intake.selected.includes(issue.id)} disabled={intake.busy} onPress={() => intake.toggleIssue(issue.id)} />
+        <View style={styles.issueHeader}><View style={styles.issueIconTile}><AppIcon name={issueIconName(issue.label)} size={18} color={palette.accent}/></View><View style={styles.grow}><Check label={issue.label} checked={intake.selected.includes(issue.id)} disabled={intake.busy} onPress={() => intake.toggleIssue(issue.id)} /></View></View>
         <Text style={styles.body}>{issue.reason}</Text>
         {issue.evidenceNeeded.map((detail, index) => <Text key={`${issue.id}-${index}`} style={styles.muted}>{detail}</Text>)}
       </View>)}

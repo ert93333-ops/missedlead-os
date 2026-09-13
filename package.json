@@ -19,7 +19,7 @@
     "dev:mobile": "pnpm --dir mobile exec expo start --port 8082 --max-workers 1",
     "dev:website": "concurrently -k \"pnpm dev:api\" \"pnpm dev:web\"",
     "preview:app": "pnpm --dir mobile run build:web && node scripts/serve-mobile-web.mjs",
-    "test:mobile": "tsx --test mobile/src/chat/protocol.test.mjs mobile/src/chat/web-draft.test.mjs mobile/src/requests/contracts.test.mjs mobile/src/manage/formValues.test.mjs mobile/src/platform/security.test.mjs",
+    "test:mobile": "tsx --test mobile/src/chat/protocol.test.mjs mobile/src/chat/web-draft.test.mjs mobile/src/requests/contracts.test.mjs mobile/src/manage/formValues.test.mjs mobile/src/manage/providerJob.test.mjs mobile/src/platform/security.test.mjs",
     "data:diagnostics": "tsx scripts/export-diagnostic-db.ts",
     "test:demo-chat": "node scripts/smoke-demo-chat.mjs"
   },

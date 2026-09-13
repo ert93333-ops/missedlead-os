@@ -53,9 +53,9 @@ test("renders server-ranked higher score first even when its price is higher",as
   await actor(page,"customer");
   const comparison=page.getByTestId("quote-comparison");
   await expect(comparison.getByTestId("ranked-quote-1")).toContainText("Higher Score Provider");
-  await expect(comparison.getByTestId("ranked-quote-1")).toContainText("점수 96 · 정책 3");
+  await expect(comparison.getByTestId("ranked-quote-1")).toContainText("score 96 · policy 3");
   await expect(comparison.getByTestId("ranked-quote-1")).toContainText("$180.00");
-  await expect(comparison.getByTestId("ranked-quote-1")).toContainText("면허 확인 · 보험 확인 · 평점 4.9 · 거리 3mi · 응답 8분 · 언어 English, Spanish");
+  await expect(comparison.getByTestId("ranked-quote-1")).toContainText("License verified · Insurance verified · Rating 4.9 · Distance 3mi · Response 8 min · Languages English, Spanish");
   await expect(comparison.getByTestId("ranked-quote-2")).toContainText("Lower Score Provider");
 });
 
@@ -88,7 +88,7 @@ async function integrationActor(page: Page, role: "customer" | "provider" | "ope
 }
 
 async function selectRequest(page: Page, marker: string) {
-  const picker = page.getByLabel("작업 선택");
+  const picker = page.getByLabel("Select a job");
   const value = await picker.locator("option").filter({ hasText: marker }).getAttribute("value");
   if (!value) throw new Error(`Integration request not visible: ${marker}`);
   await picker.selectOption(value);
@@ -134,13 +134,13 @@ test("Supabase integration executes customer, operator, provider quote and evide
 
   await integrationActor(page, "provider", providerToken!, providerId!);
   await selectRequest(page, marker);
-  await page.getByLabel("상호").fill("Integration Provider");
-  await page.getByLabel("작업 범위").fill("Inspect, repair, test, and clean the work area");
-  await page.getByLabel("총 견적 USD").fill("125");
-  await page.getByLabel("가장 빠른 시작").fill("2026-09-06T09:00");
-  await page.getByLabel("보증 일수").fill("90");
-  await page.getByRole("button", { name: "견적 제출" }).click();
-  await expect(page.getByRole("status")).toContainText("복합 순위");
+  await page.getByLabel("Business name").fill("Integration Provider");
+  await page.getByLabel("Scope of work").fill("Inspect, repair, test, and clean the work area");
+  await page.getByLabel("Total quote USD").fill("125");
+  await page.getByLabel("Earliest start").fill("2026-09-06T09:00");
+  await page.getByLabel("Warranty days").fill("90");
+  await page.getByRole("button", { name: "Submit quote" }).click();
+  await expect(page.getByRole("status")).toContainText("ranking factors");
 
   await integrationActor(page, "customer", customerToken!, customerId!);
   await selectRequest(page, marker);
@@ -158,17 +158,17 @@ test("Supabase integration executes customer, operator, provider quote and evide
 
   await integrationActor(page,"provider",providerToken!,providerId!);
   await selectRequest(page,marker);
-  await page.getByRole("button",{name:"작업 시작"}).click();
+  await page.getByRole("button",{name:"Start job"}).click();
   const proof=page.getByTestId("provider-evidence");
-  await proof.getByLabel("증거 설명").fill("Integration before condition evidence");
-  await proof.getByRole("button",{name:"증거 기록"}).click();
-  await page.getByLabel("변경 사유").fill("Integration condition requires added part");
-  await page.getByLabel("항목 설명").fill("Additional replacement part");
-  await page.getByLabel("수량").fill("1");
-  await page.getByLabel("단가 USD").fill("25");
-  await page.getByLabel("연결 증거 (1개 이상)").selectOption({index:0});
-  await page.getByRole("button",{name:"변경 승인 요청"}).click();
-  await expect(page.getByRole("status")).toContainText("변경 승인");
+  await proof.getByLabel("Evidence description").fill("Integration before condition evidence");
+  await proof.getByRole("button",{name:"Record evidence"}).click();
+  await page.getByLabel("Reason for change").fill("Integration condition requires added part");
+  await page.getByLabel("Item description").fill("Additional replacement part");
+  await page.getByLabel("Quantity").fill("1");
+  await page.getByLabel("Unit price USD").fill("25");
+  await page.getByLabel("Linked evidence (at least 1)").selectOption({index:0});
+  await page.getByRole("button",{name:"Request change approval"}).click();
+  await expect(page.getByRole("status")).toContainText("Change approval");
 
   await integrationActor(page,"customer",customerToken!,customerId!);
   await selectRequest(page,marker);
@@ -178,11 +178,11 @@ test("Supabase integration executes customer, operator, provider quote and evide
   await integrationActor(page,"provider",providerToken!,providerId!);
   await selectRequest(page,marker);
   const completionProof=page.getByTestId("provider-evidence");
-  await completionProof.getByLabel("단계").selectOption("after");
-  await completionProof.getByLabel("증거 설명").fill("Integration after repair evidence");
-  await completionProof.getByRole("button",{name:"증거 기록"}).click();
-  await page.getByRole("button",{name:"작업 완료 제출"}).click();
-  await expect(page.getByRole("status")).toContainText("72시간");
+  await completionProof.getByLabel("Stage").selectOption("after");
+  await completionProof.getByLabel("Evidence description").fill("Integration after repair evidence");
+  await completionProof.getByRole("button",{name:"Record evidence"}).click();
+  await page.getByRole("button",{name:"Submit completion"}).click();
+  await expect(page.getByRole("status")).toContainText("72-hour");
 
   const balance=await page.request.post(`/api/requests/${requestId}/balance`,{headers:{Authorization:`Bearer ${customerToken}`,"Idempotency-Key":`e2e-balance-${Date.now()}`},data:{}});
   expect(balance.ok(),await balance.text()).toBeTruthy();
@@ -195,8 +195,8 @@ test("Supabase integration executes customer, operator, provider quote and evide
 
   await integrationActor(page,"operator",operatorToken!,operatorId!);
   await selectRequest(page,marker);
-  await page.getByRole("button",{name:"정산 실행"}).click();
-  await expect(page.getByRole("status")).toContainText("정산을 실행");
+  await page.getByRole("button",{name:"Run settlement"}).click();
+  await expect(page.getByRole("status")).toContainText("Settlement executed");
   await shot(page, "e2e-supabase-integration-flow.png");
 });
 
@@ -298,13 +298,13 @@ test("customer full flow renders every role and enforces lifecycle API contracts
   await expect(page.getByTestId("request-details")).toHaveCount(0);
 
   await actor(page, "provider");
-  await page.getByLabel("상호").fill("Mint Plumbing");
-  await page.getByLabel("작업 범위").fill("Replace trap, pressure test, and clean work area");
-  await page.getByLabel("총 견적 USD").fill("125");
-  await page.getByLabel("가장 빠른 시작").fill("2026-09-06T09:00");
-  await page.getByLabel("보증 일수").fill("90");
-  await page.getByRole("button", { name: "견적 제출" }).click();
-  await expect(page.getByRole("status")).toContainText("전송");
+  await page.getByLabel("Business name").fill("Mint Plumbing");
+  await page.getByLabel("Scope of work").fill("Replace trap, pressure test, and clean work area");
+  await page.getByLabel("Total quote USD").fill("125");
+  await page.getByLabel("Earliest start").fill("2026-09-06T09:00");
+  await page.getByLabel("Warranty days").fill("90");
+  await page.getByRole("button", { name: "Submit quote" }).click();
+  await expect(page.getByRole("status")).toContainText("sent to the customer");
 
   await actor(page, "customer");
   await page.getByRole("button", { name: "Choose this quote" }).click();
@@ -313,24 +313,24 @@ test("customer full flow renders every role and enforces lifecycle API contracts
   await expect(page.getByTestId("change-orders")).toBeVisible();
 
   await actor(page, "provider");
-  await page.getByRole("button", { name: "작업 시작" }).click();
-  await expect(page.getByRole("status")).toContainText("시작");
+  await page.getByRole("button", { name: "Start job" }).click();
+  await expect(page.getByRole("status")).toContainText("Job started");
   const evidence = page.getByTestId("provider-evidence");
-  await evidence.getByLabel("증거 설명").fill("Dry cabinet before replacement");
-  await evidence.getByRole("button", { name: "증거 기록" }).click();
+  await evidence.getByLabel("Evidence description").fill("Dry cabinet before replacement");
+  await evidence.getByRole("button", { name: "Record evidence" }).click();
   await expect(evidence).toContainText("Dry cabinet before replacement");
-  await page.getByLabel("변경 사유").fill("Corroded shutoff requires replacement");
-  await page.getByLabel("항목 설명").fill("Replace shutoff valve");
-  await page.getByLabel("수량").fill("1");
-  await page.getByLabel("단가 USD").fill("30");
-  await page.getByLabel("연결 증거 (1개 이상)").selectOption("evidence-before");
-  await page.getByRole("button", { name: "변경 승인 요청" }).click();
-  await expect(page.getByRole("status")).toContainText("변경 승인");
-  await evidence.getByLabel("단계").selectOption("after");
-  await evidence.getByLabel("증거 설명").fill("New trap installed and leak tested");
-  await evidence.getByRole("button", { name: "증거 기록" }).click();
-  await page.getByRole("button", { name: "작업 완료 제출" }).click();
-  await expect(page.getByRole("status")).toContainText("72시간");
+  await page.getByLabel("Reason for change").fill("Corroded shutoff requires replacement");
+  await page.getByLabel("Item description").fill("Replace shutoff valve");
+  await page.getByLabel("Quantity").fill("1");
+  await page.getByLabel("Unit price USD").fill("30");
+  await page.getByLabel("Linked evidence (at least 1)").selectOption("evidence-before");
+  await page.getByRole("button", { name: "Request change approval" }).click();
+  await expect(page.getByRole("status")).toContainText("Change approval");
+  await evidence.getByLabel("Stage").selectOption("after");
+  await evidence.getByLabel("Evidence description").fill("New trap installed and leak tested");
+  await evidence.getByRole("button", { name: "Record evidence" }).click();
+  await page.getByRole("button", { name: "Submit completion" }).click();
+  await expect(page.getByRole("status")).toContainText("72-hour");
 
   await actor(page, "customer");
   await expect(page.getByTestId("completion-protection")).toBeVisible();

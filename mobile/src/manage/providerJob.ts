@@ -7,10 +7,25 @@ type DashboardEvidence = {
   readonly kind: string;
 };
 
+type DashboardQuote = {
+  readonly requestId: string;
+  readonly providerId: string;
+};
+
 export type ProviderEvidenceReadiness = {
   readonly kinds: Record<ProviderEvidenceKind, boolean>;
   readonly completionReady: boolean;
 };
+
+export function hasProviderQuote(
+  requestId: string,
+  providerId: string,
+  quotes: readonly DashboardQuote[],
+): boolean {
+  return quotes.some(
+    quote => quote.requestId === requestId && quote.providerId === providerId,
+  );
+}
 
 export function getProviderEvidenceReadiness(
   requestId: string,

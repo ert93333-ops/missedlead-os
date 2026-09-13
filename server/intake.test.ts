@@ -130,15 +130,15 @@ describe("chat intake", () => {
 
   it("sanitizes the same short PNG and MP4 shapes used by integrated QA", async () => {
     const image = await sharp({ create: { width: 96, height: 96, channels: 3, background: "#B87E48" } }).png().toBuffer();
-    const video = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0xB87E48:s=96x96:d=1:r=5", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1"], { maxBuffer: 2_000_000, windowsHide: true });
+    const video = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0xB87E48:s=96x96:d=1:r=5", "-an", "-c:v", "libx264", "-threads", "1", "-pix_fmt", "yuv420p", "-movflags", "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1"], { maxBuffer: 2_000_000, timeout: 30_000, windowsHide: true });
     await expect(sanitizeMediaBuffer(image, "image/png")).resolves.toEqual(expect.any(Buffer));
     await expect(sanitizeMediaBuffer(video, "video/mp4")).resolves.toEqual(expect.any(Buffer));
-  });
+  }, 90_000);
 
   it("rejects audio or video longer than sixty seconds", async () => {
-    const audio = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono", "-t", "61", "-f", "mp3", "pipe:1"], { maxBuffer: 2_000_000, windowsHide: true });
+    const audio = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono", "-t", "61", "-f", "mp3", "pipe:1"], { maxBuffer: 2_000_000, timeout: 30_000, windowsHide: true });
     await expect(sanitizeMediaBuffer(audio, "audio/mpeg")).rejects.toBeInstanceOf(MediaSanitizationError);
-  });
+  }, 60_000);
   it("returns 503 when no real AI provider is configured", async () => {
     const unavailable = new FakeIntakeProvider();
     unavailable.analyze = async () => { throw new IntakeProviderUnavailableError("not_configured"); };

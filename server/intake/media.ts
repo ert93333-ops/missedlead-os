@@ -40,7 +40,7 @@ export const sanitizeMediaBuffer = async (buffer: Buffer, contentType: string): 
     const probe = await runFile("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input], { timeout: 10_000, windowsHide: true });
     const durationSeconds = Number(probe.stdout.trim());
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 60) throw new MediaSanitizationError(contentType);
-    await runFile("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-i", input, ...mapping, "-sn", "-dn", "-map_metadata", "-1", "-map_metadata:s:v", "-1", "-map_metadata:s:a", "-1", "-c", "copy", output], { timeout: 30_000, windowsHide: true });
+    await runFile("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-i", input, ...mapping, "-sn", "-dn", "-map_metadata", "-1", "-map_metadata:s:v", "-1", "-map_metadata:s:a", "-1", "-map_chapters", "-1", "-c", "copy", output], { timeout: 30_000, windowsHide: true });
     return await readFile(output);
   } catch (error) {
     throw new MediaSanitizationError(contentType, { cause: error });

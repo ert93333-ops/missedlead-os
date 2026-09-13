@@ -28,8 +28,8 @@ test("hazard intake is a hard block and never exposes matching or payment", asyn
   await expect(page.getByRole("button",{name:"Confirm and find technicians"})).toHaveCount(0);
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByTestId("demo-customer").click();
-  await expect(page.getByTestId("blocked-request")).toContainText("긴급기관");
-  await expect(page.getByRole("button", { name: "이 견적 선택" })).toHaveCount(0);
+  await expect(page.getByTestId("blocked-request")).toContainText("emergency services");
+  await expect(page.getByRole("button", { name: "Choose this quote" })).toHaveCount(0);
   const path = resolve("artifacts", "e2e-safety-hard-block.png");
   await page.screenshot({ path, fullPage: true });
   await test.info().attach("safety-hard-block", { path, contentType: "image/png" });

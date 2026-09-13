@@ -1,6 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getProviderEvidenceReadiness } from './providerJob.ts';
+import { getProviderEvidenceReadiness, hasProviderQuote } from './providerJob.ts';
+
+test('another provider quote for the same request does not count as mine', () => {
+  const quotes = [
+    { requestId: 'request-1', providerId: 'provider-a' },
+  ];
+
+  const result = hasProviderQuote('request-1', 'provider-b', quotes);
+
+  assert.equal(result, false);
+});
+
+test('my quote counts for its request', () => {
+  const quotes = [
+    { requestId: 'request-1', providerId: 'provider-b' },
+  ];
+
+  assert.equal(hasProviderQuote('request-1', 'provider-b', quotes), true);
+});
+
+test('my quote for another request does not count', () => {
+  const quotes = [
+    { requestId: 'request-1', providerId: 'provider-b' },
+  ];
+
+  assert.equal(hasProviderQuote('request-2', 'provider-b', quotes), false);
+});
 
 test('completion is not ready when before or after evidence is missing', () => {
   assert.equal(getProviderEvidenceReadiness('request-1', []).completionReady, false);

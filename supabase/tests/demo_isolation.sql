@@ -3,12 +3,13 @@ create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 select plan(8);
 select set_config('request.jwt.claim.role','service_role',true);
+insert into service_zips(zip) values('28202') on conflict(zip) do nothing;
 insert into profiles(id,role,display_name,is_demo) values
  ('18000000-0000-0000-0000-000000000001','customer','Demo',true),
  ('18000000-0000-0000-0000-000000000002','customer','Real',false);
 insert into profiles(id,role,display_name,is_demo,provider_status,license_verified,license_expires_at,insurance_verified,insurance_expires_at,service_categories,service_areas)
-values ('18000000-0000-0000-0000-000000000003','provider','Fictional test',true,'approved',true,'2099-01-01',true,'2099-01-01','{plumbing}','{Charlotte}'),
- ('18000000-0000-0000-0000-000000000004','provider','Real provider',false,'approved',true,'2099-01-01',true,'2099-01-01','{plumbing}','{Charlotte}');
+values ('18000000-0000-0000-0000-000000000003','provider','Fictional test',true,'approved',true,'2099-01-01',true,'2099-01-01','{plumbing}','{28202}'),
+ ('18000000-0000-0000-0000-000000000004','provider','Real provider',false,'approved',true,'2099-01-01',true,'2099-01-01','{plumbing}','{28202}');
 select is(demo_seed_ready(),true,'service can check isolation contract');
 select confirm_intake('18000000-0000-0000-0000-000000000001','Demo','28202','Leak','plumbing','{}','{"category":"plumbing","hazards":[]}','{}','demo-isolation');
 select confirm_intake('18000000-0000-0000-0000-000000000002','Real','28202','Leak','plumbing','{}','{"category":"plumbing","hazards":[]}','{}','real-isolation');

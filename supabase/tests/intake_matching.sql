@@ -4,15 +4,17 @@ create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 select plan(12);
 
+insert into service_zips(zip) values('28202') on conflict(zip) do nothing;
+
 insert into profiles(id,role,display_name,provider_status,license_verified,license_expires_at,insurance_verified,insurance_expires_at,service_categories,service_areas) values
  ('15000000-0000-0000-0000-000000000001','customer','Customer',null,false,null,false,null,'{}','{}'),
- ('25000000-0000-0000-0000-000000000001','provider','Plumber 1','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000002','provider','Plumber 2','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000003','provider','Plumber 3','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000004','provider','Plumber 4','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000005','provider','HVAC only','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['hvac'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000006','provider','Expired','approved',true,clock_timestamp()-interval '1 second',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Charlotte']),
- ('25000000-0000-0000-0000-000000000007','provider','Other area','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['Raleigh']);
+ ('25000000-0000-0000-0000-000000000001','provider','Plumber 1','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28202']),
+ ('25000000-0000-0000-0000-000000000002','provider','Plumber 2','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28202']),
+ ('25000000-0000-0000-0000-000000000003','provider','Plumber 3','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28202']),
+ ('25000000-0000-0000-0000-000000000004','provider','Plumber 4','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28202']),
+ ('25000000-0000-0000-0000-000000000005','provider','HVAC only','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['hvac'],array['28202']),
+ ('25000000-0000-0000-0000-000000000006','provider','Expired','approved',true,clock_timestamp()-interval '1 second',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28202']),
+ ('25000000-0000-0000-0000-000000000007','provider','Other area','approved',true,clock_timestamp()+interval '1 year',true,clock_timestamp()+interval '1 year',array['plumbing'],array['28203']);
 
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','15000000-0000-0000-0000-000000000001',true);
@@ -23,7 +25,7 @@ select throws_ok(
 select set_config('request.jwt.claim.role','service_role',true);
 select set_config('test.intake_result',confirm_intake(
   '15000000-0000-0000-0000-000000000001',
-  'Customer','101 Tryon St, Charlotte, NC','Water is leaking below the sink','plumbing',
+  'Customer','101 Tryon St, Charlotte, NC 28202','Water is leaking below the sink','plumbing',
   '{"symptom":"leak","location":"kitchen sink"}',
   '{"category":"plumbing","urgency":"routine","possibleCauses":["trap"],"confidence":0.8,"questions":[],"hazards":[]}',
   '{"source":"regional","sampleCount":40,"updatedAt":"2026-09-05T12:00:00Z","confidence":0.7,"priceCents":12500}',

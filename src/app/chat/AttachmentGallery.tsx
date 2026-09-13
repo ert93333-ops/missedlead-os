@@ -28,18 +28,18 @@ export function AttachmentGallery({ requestId, call, locale }: { requestId: stri
   }, [call, requestId]);
 
   if (!loading && media.length === 0 && !error) return null;
-  const es = locale === "es", en = locale === "en";
+  const es = locale === "es";
   return <section className="panel span-two attachment-gallery" data-testid="intake-media-gallery">
-    <div className="section-title"><p>{es ? "ARCHIVOS DE LA SOLICITUD" : en ? "REQUEST ATTACHMENTS" : "현장 자료"}</p><h2>{es ? "Fotos y grabaciones compartidas" : en ? "Shared photos and recordings" : "고객이 공유한 사진과 녹화"}</h2></div>
-    <p className="attachment-gallery__help">{es ? "Se eliminaron los metadatos del archivo. Actualice si el enlace caduca." : en ? "File metadata has been removed. Refresh if a link expires." : "파일 메타데이터를 제거했습니다. 링크가 만료되면 새로고침하세요."}</p>
-    {loading && <p role="status">{es ? "Cargando archivos…" : en ? "Loading attachments…" : "자료를 불러오는 중입니다…"}</p>}
-    {error && <div className="chat-error" role="alert"><p>{error}</p><button type="button" onClick={() => void load()}>{es ? "Intentar de nuevo" : en ? "Try again" : "다시 불러오기"}</button></div>}
+    <div className="section-title"><p>{es ? "ARCHIVOS DE LA SOLICITUD" : "REQUEST ATTACHMENTS"}</p><h2>{es ? "Fotos y grabaciones compartidas" : "Shared photos and recordings"}</h2></div>
+    <p className="attachment-gallery__help">{es ? "Se eliminaron los metadatos del archivo. Actualice si el enlace caduca." : "File metadata has been removed. Refresh if a link expires."}</p>
+    {loading && <p role="status">{es ? "Cargando archivos…" : "Loading attachments…"}</p>}
+    {error && <div className="chat-error" role="alert"><p>{error}</p><button type="button" onClick={() => void load()}>{es ? "Intentar de nuevo" : "Try again"}</button></div>}
     {media.length > 0 && <div className="attachment-gallery__grid">{media.map((item) => <figure key={item.id}>
       {item.contentType.startsWith("image/") && <img src={item.url} alt={item.fileName} loading="lazy"/>}
       {item.contentType.startsWith("video/") && <video src={item.url} controls preload="metadata" aria-label={item.fileName}/>} 
       {item.contentType.startsWith("audio/") && <audio src={item.url} controls preload="metadata" aria-label={item.fileName}/>} 
       <figcaption><strong>{item.fileName}</strong><span>{(item.sizeBytes / 1024 / 1024).toFixed(1)} MB</span></figcaption>
     </figure>)}</div>}
-    {media.length > 0 && <button type="button" onClick={() => void load()} disabled={loading}>{es ? "Actualizar enlaces" : en ? "Refresh links" : "링크 새로고침"}</button>}
+    {media.length > 0 && <button type="button" onClick={() => void load()} disabled={loading}>{es ? "Actualizar enlaces" : "Refresh links"}</button>}
   </section>;
 }

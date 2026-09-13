@@ -21,13 +21,13 @@ test("72-hour hold rejects preflight and performs no settlement", async ({ page 
     if (path === "/api/dashboard") return route.fulfill({ json: dashboard() });
     if (path === "/api/requests/req-settle/settlement-preflight" && req.method() === "POST") {
       preflights += 1; expect(req.postDataJSON()).toEqual({});
-      return route.fulfill({ status: 409, json: { error: "dispute_window_open", guidance: "72시간 보호 기간이 끝나지 않았습니다." } });
+      return route.fulfill({ status: 409, json: { error: "dispute_window_open", guidance: "The 72-hour protection period has not ended yet." } });
     }
     throw new Error(`Hold allowed forbidden API request: ${req.method()} ${path}`);
   });
   await openOperator(page);
-  await page.getByRole("button", { name: "정산 실행" }).click();
-  await expect(page.getByRole("status")).toContainText("72시간 보호 기간");
+  await page.getByRole("button", { name: "Run settlement" }).click();
+  await expect(page.getByRole("status")).toContainText("72-hour protection period");
   expect(preflights).toBe(1);
 });
 
@@ -54,9 +54,9 @@ test("exact 72-hour boundary authorizes one idempotent settlement", async ({ pag
     throw new Error(`Unexpected settlement API request: ${req.method()} ${path}`);
   });
   await openOperator(page);
-  await page.getByRole("button", { name: "정산 실행" }).click();
-  await expect(page.getByRole("status")).toContainText("정산을 실행");
-  await expect(page.getByRole("button", { name: "정산 실행" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Run settlement" }).click();
+  await expect(page.getByRole("status")).toContainText("Settlement executed");
+  await expect(page.getByRole("button", { name: "Run settlement" })).toHaveCount(0);
   expect(phase).toBe("settled");
   const path = resolve("artifacts", "e2e-settlement-exact-boundary.png");
   await page.screenshot({ path, fullPage: true });

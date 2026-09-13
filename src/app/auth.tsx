@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: (auth: AuthValue) => Reac
     accessToken: demo?.accessToken ?? session?.access_token ?? null,
     loading,
     signIn: async (email) => {
-      if (!supabase) throw new Error("Supabase 환경 설정이 필요합니다.");
+      if (!supabase) throw new Error("Supabase environment configuration is required.");
       const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
       if (error) throw error;
     },

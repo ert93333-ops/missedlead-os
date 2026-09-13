@@ -31,7 +31,7 @@ pnpm dev:stable
 
 고객이 하나의 채팅창에서 증상과 사진·짧은 영상·음성을 보내면 설정된 LLM이 가능한 원인과 추가 질문을 반환합니다. 선택 질문은 견적 변동 안내를 확인한 뒤 건너뛸 수 있지만 위험 확인은 우회할 수 없습니다. 고객이 잠정 작업 범위를 확인하면 자격이 유효한 해당 업종의 업체를 최대 3개 찾습니다. 실제 업체가 없으면 매칭 대기로 표시하며 업체나 가격을 만들어내지 않습니다.
 
-영어·스페인어 상담 및 번역을 지원합니다. 원문은 보존하고 번역에는 금액·작업 범위·법적 표현 확인 안내를 표시합니다. 요구사항은 [기능별 검수 기준](docs/FEATURE_ACCEPTANCE.md), 이번 실행 증거와 미구현·미검증 항목은 [개발 기록](docs/DELIVERY_20260905.md)에서 확인할 수 있습니다.
+영어·스페인어 상담 및 번역을 지원합니다. 원문은 보존하고 번역에는 금액·작업 범위·법적 표현 확인 안내를 표시합니다. 요구사항은 [기능별 검수 기준](docs/FEATURE_ACCEPTANCE.md), 초기 개발 내용은 [기존 개발 기록](docs/DELIVERY_20260905.md), 최신 개선 결과와 남은 확인은 [2026-09-09 개발 기록](docs/DELIVERY_20260909.md)에서 확인할 수 있습니다.
 
 ## 환경 설정
 
@@ -45,9 +45,13 @@ pnpm exec supabase test db supabase/tests/rls.sql
 pnpm exec supabase test db supabase/tests/invariants.sql
 pnpm exec supabase test db supabase/tests/settlement_protocol.sql
 pnpm exec supabase test db supabase/tests/ledger_recovery.sql
+pnpm exec supabase test db supabase/tests/zip_matching.sql
+pnpm exec supabase test db supabase/tests/delayed_matching.sql
 ```
 
 `supabase/migrations/0001_mvp.sql`은 RLS 기본 거부, 역할별 RPC, 20% 보증금, 별도 잔액 결제, 72시간 이의제기, 불변 수수료 스냅샷, 멱등 정산·환불·reversal과 복구 원장을 정의합니다.
+
+이번 API 버전을 실행하기 전에 기존 DB에 `0013_zip_matching.sql`, `0014_delayed_matching.sql`을 순서대로 적용해야 합니다. 신규 접수는 승인된 우편번호로 업체를 찾고, 기존 도시 단위 지역값은 업체 재승인 후에도 보존됩니다. API 서버가 시작할 때와 이후 매분, 접수 후 24시간이 지난 요청의 빈 업체 자리를 자동으로 확인합니다. 상태 확인과 추가 배정은 하나의 DB 작업으로 처리됩니다.
 
 ## 검증
 

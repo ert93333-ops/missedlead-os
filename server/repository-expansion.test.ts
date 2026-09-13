@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SupabaseRepository } from "./repository.js";
 
 type StubOptions = {
-  readonly updateStatus: number;
+  readonly rpcStatus: number;
 };
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -15,26 +15,27 @@ afterEach(async () => {
   })));
 });
 
-const startSupabaseStub = async ({ updateStatus }: StubOptions) => {
-  let updateCount = 0;
-  const handler = (request: IncomingMessage, response: ServerResponse) => {
+const readBody = (request: IncomingMessage) => new Promise<string>((resolve, reject) => {
+  const chunks: Buffer[] = [];
+  request.on("data", (chunk: Buffer) => chunks.push(chunk));
+  request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  request.on("error", reject);
+});
+
+const startSupabaseStub = async ({ rpcStatus }: StubOptions) => {
+  let rpcCount = 0;
+  let rpcBody = "";
+  const handler = async (request: IncomingMessage, response: ServerResponse) => {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     response.setHeader("Content-Type", "application/json");
 
-    if (request.method === "GET" && path === "/rest/v1/service_requests") {
-      response.end(JSON.stringify([{ id: "request-1" }]));
-      return;
-    }
-    if (request.method === "GET" && ["/rest/v1/request_matches", "/rest/v1/quotes", "/rest/v1/profiles"].includes(path)) {
-      response.end("[]");
-      return;
-    }
-    if (request.method === "PATCH" && path === "/rest/v1/service_requests") {
-      updateCount += 1;
-      response.statusCode = updateStatus;
-      response.end(updateStatus >= 400
-        ? JSON.stringify({ code: "XX000", details: null, hint: null, message: "update failed" })
-        : "[]");
+    if (request.method === "POST" && path === "/rest/v1/rpc/expand_stale_quote_requests") {
+      rpcCount += 1;
+      rpcBody = await readBody(request);
+      response.statusCode = rpcStatus;
+      response.end(rpcStatus >= 400
+        ? JSON.stringify({ code: "XX000", details: null, hint: null, message: "delayed matching failed" })
+        : "1");
       return;
     }
 
@@ -48,32 +49,34 @@ const startSupabaseStub = async ({ updateStatus }: StubOptions) => {
   if (!address || typeof address === "string") throw new Error("test server did not bind to a TCP port");
   return {
     repository: new SupabaseRepository(`http://127.0.0.1:${address.port}`, "anon-key", "service-key"),
-    updateCount: () => updateCount,
+    rpcCount: () => rpcCount,
+    rpcBody: () => rpcBody,
   };
 };
 
 describe("SupabaseRepository.expandStaleQuoteRequests", () => {
-  it("rejects when the final request expansion update fails", async () => {
+  it("rejects when the atomic delayed matching RPC fails", async () => {
     // Given
-    const stub = await startSupabaseStub({ updateStatus: 500 });
+    const stub = await startSupabaseStub({ rpcStatus: 500 });
 
     // When
-    const expansion = stub.repository.expandStaleQuoteRequests("2026-09-05T12:00:00.000Z");
+    const expansion = stub.repository.expandStaleQuoteRequests("2026-09-08T12:00:00.000Z");
 
     // Then
-    await expect(expansion).rejects.toMatchObject({ message: "update failed" });
-    expect(stub.updateCount()).toBe(1);
+    await expect(expansion).rejects.toMatchObject({ message: "delayed matching failed" });
+    expect(stub.rpcCount()).toBe(1);
   });
 
-  it("resolves when the final request expansion update succeeds", async () => {
+  it("passes the recorded time to one successful delayed matching RPC", async () => {
     // Given
-    const stub = await startSupabaseStub({ updateStatus: 200 });
+    const stub = await startSupabaseStub({ rpcStatus: 200 });
 
     // When
-    const expansion = stub.repository.expandStaleQuoteRequests("2026-09-05T12:00:00.000Z");
+    const expansion = stub.repository.expandStaleQuoteRequests("2026-09-08T12:00:00.000Z");
 
     // Then
     await expect(expansion).resolves.toBeUndefined();
-    expect(stub.updateCount()).toBe(1);
+    expect(stub.rpcCount()).toBe(1);
+    expect(stub.rpcBody()).toBe(JSON.stringify({ p_now: "2026-09-08T12:00:00.000Z" }));
   });
 });

@@ -16,6 +16,7 @@ export function useIntake(accessToken: string) {
   const [consent, setConsent] = useState(initial.consent);
   const [assessment, setAssessment] = useState<Assessment | null>(initial.assessment);
   const [translations, setTranslations] = useState<Record<number, Translation>>(initial.translations);
+  const [translationsEnabled, setTranslationsEnabledState] = useState(initial.translationsEnabled);
   const [translationsDirty, setTranslationsDirty] = useState(initial.translationsDirty);
   const [selected, setSelected] = useState<string[]>(initial.selected);
   const [skips, setSkips] = useState<string[]>(initial.skips);
@@ -33,8 +34,8 @@ export function useIntake(accessToken: string) {
   const requiresReattach = missingMedia(files);
 
   useEffect(() => {
-    setSaveFailed(!writeDraft(storage, { locale, messages, draft, files, consent, assessment, translations, translationsDirty, selected, skips, skipAck, warningAck, name, address, confirmation, uploadComplete }));
-  }, [storage, locale, messages, draft, files, consent, assessment, translations, translationsDirty, selected, skips, skipAck, warningAck, name, address, confirmation, uploadComplete]);
+    setSaveFailed(!writeDraft(storage, { locale, messages, draft, files, consent, assessment, translations, translationsEnabled, translationsDirty, selected, skips, skipAck, warningAck, name, address, confirmation, uploadComplete }));
+  }, [storage, locale, messages, draft, files, consent, assessment, translations, translationsEnabled, translationsDirty, selected, skips, skipAck, warningAck, name, address, confirmation, uploadComplete]);
 
   async function perform(action: () => Promise<void>) {
     if (lock.current) return;
@@ -64,12 +65,17 @@ export function useIntake(accessToken: string) {
     setRetry(() => () => perform(action)); await perform(action);
   }
 
-  async function translate(index: number) {
-    const message = messages[index];
-    if (!message || translations[index] || confirmation) return;
+  async function enableTranslations(enabled: boolean) {
+    setTranslationsEnabledState(enabled);
+    if (!enabled || confirmation || !messages.length) return;
+    const pending = messages
+      .map((message, index) => ({ message, index }))
+      .filter(({ message, index }) => !translations[index] && message.content.trim());
+    if (!pending.length) return;
     await perform(async () => {
-      const translated = await request('/api/intake/translate', accessToken, translationSchema, { text: message.content, sourceLocale: message.locale, targetLocale: message.locale === 'en' ? 'es' : 'en' });
-      setTranslations(current => ({ ...current, [index]: translated })); setTranslationsDirty(true);
+      const translated = await Promise.all(pending.map(({ message }) => request('/api/intake/translate', accessToken, translationSchema, { text: message.content, sourceLocale: message.locale, targetLocale: message.locale === 'en' ? 'es' : 'en' })));
+      setTranslations(current => ({ ...current, ...Object.fromEntries(pending.map(({ index }, offset) => [index, translated[offset]])) }));
+      setTranslationsDirty(true);
     });
   }
 
@@ -104,13 +110,13 @@ export function useIntake(accessToken: string) {
   }
   function reset() {
     if (busy) return;
-    clearDraft(storage); discardMedia(files, accountId ?? undefined); setFiles([]); setMessages([]); setDraft(''); setAssessment(null); setTranslations({}); setTranslationsDirty(false);
+    clearDraft(storage); discardMedia(files, accountId ?? undefined); setFiles([]); setMessages([]); setDraft(''); setAssessment(null); setTranslations({}); setTranslationsEnabledState(false); setTranslationsDirty(false);
     setSelected([]); setSkips([]); setSkipAck(false); setWarningAck(false); setName(''); setAddress(''); setConfirmation(null); setUploadComplete(false); setError(''); setRetry(null); setConsent(false);
   }
   function toggleSkip(id: string) { setSkips(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]); setSkipAck(false); }
   function toggleIssue(id: string) { setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]); }
-  return { locale, setLocale, messages, draft, setDraft, files, consent, setConsent, assessment, translations, translationsDirty,
+  return { locale, setLocale, messages, draft, setDraft, files, consent, setConsent, assessment, translations, translationsEnabled, enableTranslations, translationsDirty,
     selected, toggleIssue, skips, toggleSkip, skipAck, setSkipAck, warningAck, setWarningAck, name, setName, address, setAddress,
-    busy, error, retry, saveFailed, requiresReattach, confirmation, uploadComplete, analyze, translate, confirm, addMedia, removeMedia, reset };
+    busy, error, retry, saveFailed, requiresReattach, confirmation, uploadComplete, analyze, confirm, addMedia, removeMedia, reset };
 }
 export type Intake = ReturnType<typeof useIntake>;

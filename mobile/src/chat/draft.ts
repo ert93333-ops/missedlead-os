@@ -6,12 +6,12 @@ import { discardAccountMedia } from './media';
 const draftSchema = z.object({
   locale: localeSchema, messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string(), locale: localeSchema })),
   draft: z.string(), files: z.array(z.object({ uri: z.string(), name: z.string(), mimeType: z.string(), size: z.number() })),
-  consent: z.boolean(), assessment: assessmentSchema.nullable(), translations: z.record(z.string(), translationSchema), translationsDirty: z.boolean(),
+  consent: z.boolean(), assessment: assessmentSchema.nullable(), translations: z.record(z.string(), translationSchema), translationsEnabled: z.boolean().default(false), translationsDirty: z.boolean(),
   selected: z.array(z.string()), skips: z.array(z.string()), skipAck: z.boolean(), warningAck: z.boolean(), name: z.string(), address: z.string(),
   confirmation: confirmationSchema.nullable(), uploadComplete: z.boolean(),
 });
 export type Draft = z.infer<typeof draftSchema>;
-const empty: Draft = { locale: 'en', messages: [], draft: '', files: [], consent: false, assessment: null, translations: {}, translationsDirty: false, selected: [], skips: [], skipAck: false, warningAck: false, name: '', address: '', confirmation: null, uploadComplete: false };
+const empty: Draft = { locale: 'en', messages: [], draft: '', files: [], consent: false, assessment: null, translations: {}, translationsEnabled: false, translationsDirty: false, selected: [], skips: [], skipAck: false, warningAck: false, name: '', address: '', confirmation: null, uploadComplete: false };
 
 function validAccountId(value: string): boolean {
   return value.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(value);

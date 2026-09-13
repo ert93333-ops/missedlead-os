@@ -37,6 +37,7 @@ export function NativeChat({ accessToken, onSignOut, preferredLocale, onLocaleCh
           <IconAction label={intake.locale === 'en' ? 'More options' : 'Más opciones'} glyph="•••" disabled={intake.busy} onPress={() => setMenuOpen(open => !open)} />
         </View>
         {menuOpen ? <MotionView style={styles.secondaryMenu}>
+          <Check label={text.translationSetting} checked={intake.translationsEnabled} disabled={intake.busy || Boolean(intake.confirmation)} onPress={() => { void intake.enableTranslations(!intake.translationsEnabled); }} />
           <Action label={intake.locale === 'en' ? 'Español' : 'English'} disabled={intake.busy} onPress={() => {const next=intake.locale === 'en' ? 'es' : 'en';intake.setLocale(next);onLocaleChange?.(next);}} />
           <Action label={text.newRequest} disabled={intake.busy} onPress={reset} />
           <Action label={text.signOut} disabled={intake.busy} onPress={signOut} />
@@ -45,13 +46,13 @@ export function NativeChat({ accessToken, onSignOut, preferredLocale, onLocaleCh
       <ScrollView ref={scroll} contentContainerStyle={styles.chatContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {intake.saveFailed ? <Text style={styles.danger}>{intake.locale === 'en' ? 'This device could not save the conversation. Keep the app open to avoid losing your draft.' : 'No se pudo guardar la conversación en este dispositivo. Mantenga la aplicación abierta para conservar el borrador.'}</Text> : null}
         <View style={styles.chatBubble}><Text style={styles.body}>{text.greeting}</Text></View>
-        {intake.messages.map((message, index) => <View key={index} style={[styles.chatBubble, message.role === 'user' && styles.chatUserBubble, message.role === 'assistant' && index === intake.messages.length - 1 && styles.latestAssistantBubble]}>
+        {intake.messages.map((message, index) => <MotionView key={index} delay={Math.min(index * 25, 180)} style={[styles.chatBubble, message.role === 'user' && styles.chatUserBubble, message.role === 'assistant' && index === intake.messages.length - 1 && styles.latestAssistantBubble]}>
           <Text selectable style={styles.body}>{message.content}</Text>
-          {intake.translations[index] ? <View style={styles.separator}>
+          {intake.translationsEnabled && intake.translations[index] ? <View style={styles.separator}>
             <Text selectable style={styles.body}>{intake.translations[index]?.translated}</Text>
             <Text style={styles.muted}>{text.translationWarning}</Text>
-          </View> : <Action label={text.translate} disabled={intake.busy || Boolean(intake.confirmation)} onPress={() => { void intake.translate(index); }} />}
-        </View>)}
+          </View> : null}
+        </MotionView>)}
         {!intake.confirmation ? <AssessmentPanel intake={intake} /> : <View style={styles.section} accessibilityLiveRegion="polite">
           <Text style={styles.heading}>{text.saved}</Text>
           <Text selectable style={styles.muted}>{intake.confirmation.requestId}</Text>

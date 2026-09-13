@@ -134,13 +134,17 @@ test("Supabase integration executes customer, operator, provider quote and evide
 
   await integrationActor(page, "provider", providerToken!, providerId!);
   await selectRequest(page, marker);
-  await page.getByLabel("Business name").fill("Integration Provider");
-  await page.getByLabel("Scope of work").fill("Inspect, repair, test, and clean the work area");
-  await page.getByLabel("Total quote USD").fill("125");
-  await page.getByLabel("Earliest start").fill("2026-09-06T09:00");
+  const start = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 16);
+  await page.getByLabel("Scope of work and exclusions").fill("Inspect, repair, test, and clean the work area");
+  await page.getByLabel("Diagnosis USD").fill("25");
+  await page.getByLabel("Labor USD").fill("75");
+  await page.getByLabel("Materials USD").fill("20");
+  await page.getByLabel("Tax USD").fill("5");
+  await page.getByLabel("Quote valid until").fill(start);
+  await page.getByLabel("Earliest start").fill(start);
   await page.getByLabel("Warranty days").fill("90");
   await page.getByRole("button", { name: "Submit quote" }).click();
-  await expect(page.getByRole("status")).toContainText("ranking factors");
+  await expect(page.getByRole("status")).toContainText("sent to the customer");
 
   await integrationActor(page, "customer", customerToken!, customerId!);
   await selectRequest(page, marker);
@@ -238,14 +242,15 @@ test("customer full flow renders every role and enforces lifecycle API contracts
       expect(phase).not.toBe("empty");
       return fulfill(route,200,{media:[{id:"media-1",fileName:"intake.webm",contentType:"audio/webm",sizeBytes:3,url:"data:audio/webm;base64,AQID",expiresInSeconds:60}]});
     }
-    if (url === "/api/requests/req-1/quotes" && request.method() === "POST") {
+    if (url === "/api/providers/requests/req-1/quote" && request.method() === "POST") {
       expect(phase).toBe("matched");
-      const submitted = request.postDataJSON() as { providerName: string; scope: string; amountCents: number; ranking: { totalCents: number; earliestStartAt: string; warrantyDays: number } };
-      expect(submitted).toMatchObject({ providerName: "Mint Plumbing", scope: "Replace trap, pressure test, and clean work area", amountCents: 12500, ranking: { totalCents: 12500, warrantyDays: 90 } });
-      expect(new Date(submitted.ranking.earliestStartAt).toString()).not.toBe("Invalid Date");
-      const quote = { id: "quote-1", requestId: "req-1", ...submitted };
+      const submitted = request.postDataJSON() as { scope: string; diagnosticCents: number; laborCents: number; materialsCents: number; taxCents: number; totalCents: number; validUntil: string; earliestStartAt: string; warrantyDays: number; siteVisitRequired: boolean; permitRequired: boolean; inspectionStatus: string };
+      expect(submitted).toMatchObject({ scope: "Replace trap, pressure test, and clean work area", diagnosticCents: 2500, laborCents: 7500, materialsCents: 2000, taxCents: 500, totalCents: 12500, warrantyDays: 90, siteVisitRequired: false, permitRequired: false, inspectionStatus: "not_required" });
+      expect(new Date(submitted.earliestStartAt).toString()).not.toBe("Invalid Date");
+      expect(new Date(submitted.validUntil).toString()).not.toBe("Invalid Date");
+      const quote = { id: "quote-1", requestId: "req-1", providerName: "Mint Plumbing", scope: submitted.scope, amountCents: submitted.totalCents, ranking: { totalCents: submitted.totalCents, earliestStartAt: submitted.earliestStartAt, warrantyDays: submitted.warrantyDays } };
       state.quotes.push(quote); Object.assign(state.requests[0], { status: "quoted" }); phase = "quoted";
-      return fulfill(route, 201, quote);
+      return fulfill(route, 201, { quote });
     }
     if (url === "/api/requests/req-1/deposit" && request.method() === "POST") {
       expect(phase).toBe("quoted"); expect(request.postDataJSON()).toEqual({ quoteId: "quote-1" }); expect(request.headers()["idempotency-key"]).toBeTruthy();
@@ -298,10 +303,14 @@ test("customer full flow renders every role and enforces lifecycle API contracts
   await expect(page.getByTestId("request-details")).toHaveCount(0);
 
   await actor(page, "provider");
-  await page.getByLabel("Business name").fill("Mint Plumbing");
-  await page.getByLabel("Scope of work").fill("Replace trap, pressure test, and clean work area");
-  await page.getByLabel("Total quote USD").fill("125");
-  await page.getByLabel("Earliest start").fill("2026-09-06T09:00");
+  const quoteStart = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 16);
+  await page.getByLabel("Scope of work and exclusions").fill("Replace trap, pressure test, and clean work area");
+  await page.getByLabel("Diagnosis USD").fill("25");
+  await page.getByLabel("Labor USD").fill("75");
+  await page.getByLabel("Materials USD").fill("20");
+  await page.getByLabel("Tax USD").fill("5");
+  await page.getByLabel("Quote valid until").fill(quoteStart);
+  await page.getByLabel("Earliest start").fill(quoteStart);
   await page.getByLabel("Warranty days").fill("90");
   await page.getByRole("button", { name: "Submit quote" }).click();
   await expect(page.getByRole("status")).toContainText("sent to the customer");

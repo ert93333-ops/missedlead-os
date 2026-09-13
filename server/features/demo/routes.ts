@@ -3,7 +3,7 @@ import type { Express } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 const credentials = z.object({username:z.literal('test'),password:z.literal('test')}).strict();
-const config = z.object({SUPABASE_URL:z.string().url(),SUPABASE_ANON_KEY:z.string().min(1),DEMO_CUSTOMER_EMAIL:z.string().email(),DEMO_CUSTOMER_PASSWORD:z.string().min(32)});
+const config = z.object({SUPABASE_URL:z.string().url(),SUPABASE_ANON_KEY:z.string().min(1),DEMO_CUSTOMER_EMAIL:z.string().email(),DEMO_CUSTOMER_PASSWORD:z.string().min(6)});
 export function registerDemoRoutes(app: Express) {
  const limiter = rateLimit({windowMs:60_000,limit:10,keyGenerator:()=>"shared-demo-login",standardHeaders:'draft-8',legacyHeaders:false,message:{error:'demo_login_rate_limited'}});
  app.post('/api/demo/login', (req,res,next) => {

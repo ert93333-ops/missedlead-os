@@ -13,7 +13,7 @@ const ready=await client.rpc('demo_seed_ready');
 if(ready.error || ready.data!==true) throw new Error('Apply and verify demo isolation migration before seeding');
 const email='test@demo.wecover.invalid';
 const password=process.env.DEMO_CUSTOMER_PASSWORD || randomBytes(48).toString('base64url');
-if(password.length<32) throw new Error('Demo backend password must be strong');
+if(password.length<6) throw new Error('Demo backend password must meet the auth minimum length');
 const users=[];
 for(let page=1;;page++) { const result=await client.auth.admin.listUsers({page,perPage:1000}); if(result.error) throw new Error('Unable to inspect demo accounts'); users.push(...result.data.users); if(result.data.users.length<1000) break; }
 async function account(address,name,role) {

@@ -49,6 +49,12 @@ function AuthGate({ auth }: { auth: AuthValue }) {
         <label>Email address<input name="email" type="email" required autoComplete="email" /></label>
         <button className="primary">Send sign-in link</button>
       </form>
+      <ul className="auth-trust">
+        <li>Licensed and insured local pros, verified by our operations team</li>
+        <li>Itemized quotes compared side by side — not just the cheapest</li>
+        <li>20% deposit and a 72-hour review window before final payment</li>
+        <li>Bilingual support — English and Spanish</li>
+      </ul>
       {auth.selectDemoActor && <div className="demo-actors" data-testid="demo-actor-selector"><strong>Demo access · local only</strong>{(["customer", "provider", "operator"] as const).map((role) => <button key={role} type="button" data-testid={`demo-${role}`} onClick={() => auth.selectDemoActor?.(role)}>{role}</button>)}</div>}
     </section>
   </main>;

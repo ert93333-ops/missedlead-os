@@ -12,8 +12,8 @@
 
 :root {
   /* Named palette */
-  --primer: #F4F2EB;
-  --graphite: #22262B;
+  --primer: #F3F4F6;
+  --graphite: #1C2128;
   --utility: #1D53D6;
   --hivis: #F5A524;
   --steel: #33526B;
@@ -27,22 +27,21 @@
   /* Shared component tokens (defaults = neutral / customer-adjacent) */
   --bg: var(--primer);
   --surface: #FFFFFF;
-  --surface-2: #F8F6F0;
-  --line: #DDD9CC;
+  --surface-2: #F6F7F9;
+  --line: #DDE1E6;
   --text: var(--graphite);
-  --muted: #5E6570;
-  --faint: #8A8F96;
+  --muted: #4E5764;
+  --faint: #7C8490;
   --accent: var(--utility);
-  --accent-deep: #15409F;
-  --accent-soft: #E4EAF9;
+  --accent-deep: #163FA3;
+  --accent-soft: #E6ECF7;
   --on-accent: #FFFFFF;
-  --ok: #147A4C;
-  --ok-soft: #DFEEE4;
-  --warn: #8A5C0D;
-  --warn-soft: #FAF0D7;
+  --ok: #0F6B43;
+  --ok-soft: #DDEEE5;
+  --warn: #7C510A;
+  --warn-soft: #F5EDDA;
   --danger: var(--signal);
-  --danger-soft: #F9E4E1;
-  --grid-line: rgba(34, 38, 43, .05);
+  --danger-soft: #F6E2DF;
   --radius: 16px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(30, 36, 44, .05), 0 14px 38px rgba(30, 36, 44, .09);
@@ -63,17 +62,17 @@
 
 /* ---------- Role skins -------------------------------------------------- */
 
-/* CUSTOMER — calm trust: warm primer paper, utility blue, generous radius */
+/* CUSTOMER — calm trust: clean neutral, utility blue, generous radius */
 .app-shell[data-role="customer"] {
   --bg: var(--primer);
   --surface: #FFFFFF;
-  --surface-2: #F8F6F0;
-  --line: #DDD9CC;
+  --surface-2: #F6F7F9;
+  --line: #DDE1E6;
   --text: var(--graphite);
-  --muted: #5B6270;
+  --muted: #4E5764;
   --accent: var(--utility);
-  --accent-deep: #15409F;
-  --accent-soft: #E4EAF9;
+  --accent-deep: #163FA3;
+  --accent-soft: #E6ECF7;
   --on-accent: #FFFFFF;
   --focus-ring: rgba(29, 83, 214, .28);
 }
@@ -97,7 +96,6 @@
   --warn-soft: rgba(242, 193, 78, .15);
   --danger: #F2705F;
   --danger-soft: rgba(242, 112, 95, .16);
-  --grid-line: rgba(255, 255, 255, .045);
   --radius: 12px;
   --radius-sm: 8px;
   --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 16px 40px rgba(0, 0, 0, .45);
@@ -122,7 +120,6 @@
   --warn-soft: #F5EBD0;
   --danger: #A93028;
   --danger-soft: #F7E1DE;
-  --grid-line: rgba(35, 42, 49, .05);
   --radius: 6px;
   --radius-sm: 4px;
   --shadow: 0 1px 2px rgba(24, 32, 42, .07), 0 8px 22px rgba(24, 32, 42, .05);
@@ -279,10 +276,7 @@ fieldset legend { padding: 0 7px; color: var(--muted); font-family: var(--font-m
   place-items: center;
   padding: 24px;
   color: var(--graphite);
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 40px 40px,
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 40px 40px,
-    var(--primer);
+  background: var(--primer);
 }
 .auth-split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.3fr); gap: 20px; align-items: stretch; width: min(1060px, 100%); }
 .auth-scene { display: grid; align-content: center; gap: 18px; padding: 32px 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
@@ -326,10 +320,7 @@ main { max-width: 1200px; margin: auto; padding: 8px 28px 64px; }
   padding: 42px 6%;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 36px 36px,
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 36px 36px,
-    var(--surface);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .hero::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 5px; background: var(--accent); }
@@ -659,10 +650,7 @@ footer {
   gap: 28px;
   padding: 24px 28px 18px;
   border-bottom: 1px solid var(--line);
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 36px 36px,
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 36px 36px,
-    var(--surface-2);
+  background: var(--surface-2);
 }
 .chat-intake__kicker { margin: 0 0 6px; color: var(--accent); font: 600 .66rem var(--font-mono); letter-spacing: .16em; }
 .chat-intake__header h1 { margin: 0; font-size: clamp(1.9rem, 3.4vw, 2.6rem); text-transform: none; }

@@ -43,7 +43,7 @@ async function customer(browser) {
       if (turn === 1) return json(route, { reply: "Sorry about the leak. One safety check before we continue: do you smell gas or see any scorch marks near outlets?", locale: "en", issueCandidates: [], questions: [{ id: "safety-1", prompt: "Do you smell gas or see scorch marks near outlets?", requiredForSafety: true }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "tok-1" });
       return json(route, { reply: "That is enough to prepare a provisional repair scope.", locale: "en", issueCandidates: [{ id: "trap-leak", label: "Drain trap leak", likelihood: "high", reason: "Dripping under the sink fits a loose trap connection.", evidenceNeeded: [] }, { id: "supply-line", label: "Worn supply line", likelihood: "medium", reason: "Steady drip can also come from a corroded supply line.", evidenceNeeded: [] }], questions: [], safety: { level: "normal", guidance: "" }, readyToConfirm: true, uncertaintyWarning: "A technician must inspect before the cause and final price are confirmed.", assessmentToken: "tok-2" });
     }
-    if (path === "/api/intake/confirm") { dashboard.requests = [request]; dashboard.quotes = quotes; return json(route, { requestId: "req-maria", status: "intake", matchCount: 3 }, 201); }
+    if (path === "/api/intake/confirm") { dashboard.requests = [request]; dashboard.quotes = quotes; dashboard.messages = [{ id: "m-1", requestId: "req-maria", senderId: "ops-1", text: "Thanks Maria — three verified pros are reviewing your sink leak.", createdAt: "2026-09-10T15:02:00.000Z" }, { id: "m-2", requestId: "req-maria", senderId: "demo-customer", text: "Great, I picked Queen City Plumbing.", createdAt: "2026-09-10T15:20:00.000Z" }]; return json(route, { requestId: "req-maria", status: "intake", matchCount: 3 }, 201); }
     if (path === "/api/requests/req-maria/intake-media" && req.method() === "GET") return json(route, { media: [] });
     if (path === "/api/requests/req-maria/permit" && req.method() === "GET") return json(route, { permit: null });
     if (path === "/api/requests/req-maria/quote-details") return json(route, { details: [] });
@@ -91,7 +91,7 @@ async function provider(browser) {
   await page.route("**/api/**", (route) => {
     const req = route.request(); const path = new URL(req.url()).pathname;
     if (path === "/api/capabilities") return json(route, { payments: { enabled: false, provider: null } });
-    if (path === "/api/dashboard") return json(route, { ...blank(), requests: [request] });
+    if (path === "/api/dashboard") return json(route, { ...blank(), requests: [request], messages: [{ id: "m-1", requestId: "req-p1", senderId: "cust-dana", text: "The heater is in the garage — side door is unlocked.", createdAt: "2026-09-02T09:10:00.000Z" }, { id: "m-2", requestId: "req-p1", senderId: "demo-provider", text: "Got it, I can start Friday morning.", createdAt: "2026-09-02T09:25:00.000Z" }] });
     if (path === "/api/requests/req-p1/quote-details") return json(route, { details: [{ permit_required: true }] });
     if (path === "/api/requests/req-p1/permit" && req.method() === "GET") return json(route, { permit });
     if (path === "/api/requests/req-p1/permit" && req.method() === "PUT") { permit = { ...req.postDataJSON(), verified: false }; return json(route, { permit }); }

@@ -574,6 +574,20 @@ h1 em { color: var(--accent); font-style: normal; }
 .empty:has(svg)::before { display: none; }
 
 .next-step { margin: -6px 0 14px; padding: 10px 14px; border-left: 3px solid var(--accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--accent-soft); color: var(--accent-deep); font-size: .86rem; line-height: 1.5; }
+.thread { display: grid; gap: 10px; margin: 14px 0; }
+.thread-msg { width: fit-content; max-width: 85%; }
+.thread-msg--self { margin-left: auto; text-align: right; }
+.thread-msg > span { display: block; margin: 0 4px 4px; color: var(--faint); font-family: var(--font-mono); font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; }
+.thread-msg p { margin: 0; padding: 10px 13px; border: 1px solid var(--line); border-radius: 4px 14px 14px 14px; background: var(--surface-2); font-size: .86rem; line-height: 1.5; }
+.thread-msg--self p { border-radius: 14px 4px 14px 14px; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.schedule-status { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: .84rem; }
+.schedule-status svg { color: var(--accent); flex: 0 0 auto; }
+.review-card { display: grid; gap: 6px; margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.review-card p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.skeleton-stack { display: grid; gap: 14px; margin-top: 16px; }
+.skeleton { min-height: 150px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(100deg, var(--surface-2) 40%, var(--surface) 50%, var(--surface-2) 60%); background-size: 200% 100%; animation: skeleton-sweep 1.4s ease infinite; }
+@keyframes skeleton-sweep { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 
 /* Purposeful entrance: panels and chat messages settle once, no loops */
 .panel, .quote, .stepper, .notice { animation: rise .35s ease both; }

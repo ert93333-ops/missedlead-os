@@ -18,6 +18,7 @@ type ChatIntakeProps = {
   accessToken: string;
   onCreated: (requestId: string) => Promise<void> | void;
   onLocaleChange?: (locale: IntakeLocale) => void;
+  initialLocale?: IntakeLocale;
 };
 
 type Copy = {
@@ -59,6 +60,9 @@ type Copy = {
   moreIssues: string;
   fewerIssues: string;
   safetyUrgent: string;
+  answerPlaceholder: string;
+  skipUndo: string;
+  likelihood: Record<"high" | "medium" | "low", string>;
 };
 
 const copy: Record<IntakeLocale, Copy> = {
@@ -101,6 +105,9 @@ const copy: Record<IntakeLocale, Copy> = {
     moreIssues: "Show more possibilities",
     fewerIssues: "Show fewer",
     safetyUrgent: "Important safety note — tap to read",
+    answerPlaceholder: "Type your answer…",
+    skipUndo: "Undo skip",
+    likelihood: { high: "high", medium: "medium", low: "low" },
   },
   es: {
     title: "Cuéntenos qué pasó",
@@ -141,6 +148,9 @@ const copy: Record<IntakeLocale, Copy> = {
     moreIssues: "Ver más posibilidades",
     fewerIssues: "Ver menos",
     safetyUrgent: "Nota de seguridad importante — toque para leer",
+    answerPlaceholder: "Escriba su respuesta…",
+    skipUndo: "Deshacer omisión",
+    likelihood: { high: "alta", medium: "media", low: "baja" },
   },
 };
 
@@ -181,9 +191,9 @@ function apiError(status: number, body: unknown, locale: IntakeLocale) {
   return locale === "es" ? "No pudimos procesar su mensaje. Inténtelo de nuevo." : "We couldn’t process that message. Please try again.";
 }
 
-export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntakeProps) {
-  const [initialState] = useState(() => readStoredIntake(accessToken, "en"));
-  const [locale, setLocale] = useState<IntakeLocale>("en");
+export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLocale = "en" }: ChatIntakeProps) {
+  const [initialState] = useState(() => readStoredIntake(accessToken, initialLocale));
+  const [locale, setLocale] = useState<IntakeLocale>(initialLocale);
   const text = copy[locale];
   const [messages, setMessages] = useState<DisplayMessage[]>(initialState.messages);
   const [draft, setDraft] = useState(initialState.draft);
@@ -209,6 +219,8 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
   const [pendingMediaRequest, setPendingMediaRequest] = useState<PendingMediaRequest | null>(initialState.pendingMediaRequest);
   const logRef = useRef<HTMLDivElement>(null);
   const storageKey = intakeStorageKey(accessToken, locale);
+  const openQuestions = assessment?.questions.filter((question) => !skipQuestionIds.includes(question.id)) ?? [];
+  const activeQuestion = assessment && !assessment.readyToConfirm ? openQuestions[0] : undefined;
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -369,15 +381,9 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
       {assessment && !busy && <div className="assessment" data-testid="intake-assessment">
         {assessment.safety.level === "emergency" && <div className="safety-guidance safety-guidance--emergency" role="alert"><WarningIcon size={22}/><div><strong>{locale === "es" ? "Posible emergencia" : "Possible emergency"}</strong><p>{assessment.safety.guidance}</p></div></div>}
         {assessment.safety.level !== "normal" && assessment.safety.level !== "emergency" && <details className={`safety-guidance safety-guidance--${assessment.safety.level} safety-collapsible`}><summary><WarningIcon size={18}/><strong>{text.safetyUrgent}</strong></summary><p>{assessment.safety.guidance}</p></details>}
-        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}</section>}
-        {(() => {
-          const openQuestions = assessment.questions.filter((question) => !skipQuestionIds.includes(question.id));
-          const activeQuestion = openQuestions[0];
-          if (!activeQuestion) return null;
-          const step = assessment.questions.length - openQuestions.length + 1;
-          return <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(step)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>;
-        })()}
-        {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
+        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}</section>}
+        {activeQuestion && <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(assessment.questions.length - openQuestions.length + 1)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>}
+        {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><div className="skip-undos">{assessment.questions.filter((question) => skipQuestionIds.includes(question.id)).map((question) => <button key={question.id} type="button" className="skip-undo" onClick={() => chooseSkip(question.id)}><span>{text.skipUndo}</span>{question.prompt}</button>)}</div><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
         {translationsDirty && <div className="translation-sync"><button type="button" onClick={() => void runAnalysis()} disabled={busy || requiresReattach}>{text.saveTranslation}</button></div>}
         {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset><label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}
       </div>}
@@ -391,7 +397,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
       {requiresReattach && <p className="reattach-notice" role="alert">{text.reattach}</p>}
       <form onSubmit={(event) => { event.preventDefault(); void runAnalysis(draft); }}>
         <label className="attachment-button" title={text.attach}><PaperclipIcon/><span>{text.attach}</span><input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/webm,audio/mp4,audio/wav,audio/x-wav" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
-        <label className="sr-only" htmlFor="intake-message">{text.composerLabel}</label><textarea id="intake-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={text.placeholder} rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runAnalysis(draft); } }}/>
+        <label className="sr-only" htmlFor="intake-message">{text.composerLabel}</label><textarea id="intake-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={activeQuestion ? text.answerPlaceholder : text.placeholder} rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runAnalysis(draft); } }}/>
         <button type="submit" className="send-button" aria-label={text.send} disabled={busy || requiresReattach || (!draft.trim() && skipQuestionIds.length === 0 && files.length === 0 && !translationsDirty) || (skipQuestionIds.length > 0 && !skipAcknowledged) || (files.length > 0 && !mediaConsent)}><SendIcon/></button>
       </form>
       <div className="composer-notes"><span>{text.fileLimits}</span><span>{files.length}/10 · {(totalBytes / megabyte).toFixed(1)} MB</span></div>

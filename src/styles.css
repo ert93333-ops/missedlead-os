@@ -750,6 +750,11 @@ details.safety-collapsible { display: block; }
 .skip-warning label { display: flex; grid-template-columns: none; align-items: flex-start; gap: 9px; color: inherit; }
 .skip-warning input, .confirm-request input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
 .skip-warning button { margin-top: 12px; }
+.skip-undos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.skip-undos .skip-undo { display: inline-flex; align-items: baseline; gap: 7px; margin: 0; padding: 5px 9px; border: 1px dashed color-mix(in srgb, var(--warn) 55%, var(--line)); border-radius: 999px; background: transparent; color: var(--warn); font-size: .74rem; text-align: left; }
+.skip-undos .skip-undo span { font-weight: 700; text-decoration: underline; }
+.language-switch--topbar { padding: 2px; }
+.language-switch--topbar button { min-width: 34px; min-height: 28px; padding: .2rem .5rem; font-size: .68rem; }
 .chat-error { margin: 12px 0; background: var(--danger-soft); color: var(--danger); }
 
 .confirm-request { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-top: 4px solid var(--accent); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }

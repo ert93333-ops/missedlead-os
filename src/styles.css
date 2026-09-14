@@ -535,6 +535,17 @@ h1 em { color: var(--accent); font-style: normal; }
 .symptom-grid button:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .symptom-grid button:hover { transform: none; box-shadow: none; } }
 @media (max-width: 340px) { .symptom-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.tabbar { display: none; }
+@media (max-width: 860px) {
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: var(--surface); border-top: 1px solid var(--line); padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 16px rgb(0 0 0 / .07); }
+  .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; padding: 6px 0; border: 0; background: none; color: var(--muted); font-size: .68rem; font-weight: 650; border-radius: var(--radius-sm); }
+  .tabbar button.active { color: var(--accent-deep); }
+  .tabbar button:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: -2px; }
+  .app-shell--tabbed main { padding-bottom: 96px; }
+  .app-shell--tabbed > footer { padding-bottom: 76px; }
+  .app-shell--tabbed.app-shell--intake .intake-main { height: calc(100svh - 56px - 64px); }
+}
 .schedule-hint { margin: 0; color: var(--muted); font-size: .85rem; }
 .job-context { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
 .slot { width: fit-content; padding: .28rem .55rem !important; color: var(--warn) !important; background: var(--warn-soft) !important; border-radius: var(--radius-sm); }

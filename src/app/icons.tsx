@@ -100,6 +100,10 @@ export function FanIcon(props: IconProps) {
   return svg(props, <><circle cx="12" cy="12" r="1.6"/><path d="M12 10.4c0-3.4 1-6.4 3-6.4 1.6 0 2.4 1.2 2.4 2.6 0 2-2.2 3.4-5.4 3.8ZM13.6 12c3.4 0 6.4 1 6.4 3 0 1.6-1.2 2.4-2.6 2.4-2 0-3.4-2.2-3.8-5.4ZM12 13.6c0 3.4-1 6.4-3 6.4-1.6 0-2.4-1.2-2.4-2.6 0-2 2.2-3.4 5.4-3.8ZM10.4 12c-3.4 0-6.4-1-6.4-3 0-1.6 1.2-2.4 2.6-2.4 2 0 3.4 2.2 3.8 5.4Z"/></>);
 }
 
+export function PlusIcon(props: IconProps) {
+  return svg(props, <><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></>);
+}
+
 export function HelpIcon(props: IconProps) {
   return svg(props, <><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.2a2.6 2.6 0 0 1 5 1c0 1.7-2.3 2.2-2.6 3.6"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></>);
 }

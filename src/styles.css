@@ -582,6 +582,13 @@ h1 em { color: var(--accent); font-style: normal; }
 .thread-msg--self p { border-radius: 14px 4px 14px 14px; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
 .schedule-status { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: .84rem; }
 .schedule-status svg { color: var(--accent); flex: 0 0 auto; }
+.quote-sent { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+.quote-sent > strong { display: flex; align-items: center; gap: 7px; color: var(--ok); }
+.quote-sent p { margin: 0; }
+.quote-sent__facts { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; color: var(--muted); }
+.quote-sent__facts b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.quote-sent > small { color: var(--muted); }
+.quote-chosen { padding: 8px 12px; font-size: .8rem; }
 .review-card { display: grid; gap: 6px; margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
 .review-card p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.55; }
 .skeleton-stack { display: grid; gap: 14px; margin-top: 16px; }

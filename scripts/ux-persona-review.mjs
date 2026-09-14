@@ -88,15 +88,16 @@ async function provider(browser) {
   const page = await ctx.newPage();
   const request = { id: "req-p1", customerName: "Dana Collins", description: "50-gallon water heater replacement", address: "212 Trade St, Charlotte, NC", safetyStatus: "cleared", status: "matched", providerIds: ["demo-provider"], expandedSearch: false, workScopeSnapshot: { symptom: "No hot water; unit 12 years old", location: "Garage" }, createdAt: "2026-09-01T00:00:00.000Z" };
   let permit = null;
+  let sentQuote = null;
   await page.route("**/api/**", (route) => {
     const req = route.request(); const path = new URL(req.url()).pathname;
     if (path === "/api/capabilities") return json(route, { payments: { enabled: false, provider: null } });
-    if (path === "/api/dashboard") return json(route, { ...blank(), requests: [request], messages: [{ id: "m-1", requestId: "req-p1", senderId: "cust-dana", text: "The heater is in the garage — side door is unlocked.", createdAt: "2026-09-02T09:10:00.000Z" }, { id: "m-2", requestId: "req-p1", senderId: "demo-provider", text: "Got it, I can start Friday morning.", createdAt: "2026-09-02T09:25:00.000Z" }] });
+    if (path === "/api/dashboard") return json(route, { ...blank(), requests: [request], quotes: sentQuote ? [sentQuote] : [], messages: [{ id: "m-1", requestId: "req-p1", senderId: "cust-dana", text: "The heater is in the garage — side door is unlocked.", createdAt: "2026-09-02T09:10:00.000Z" }, { id: "m-2", requestId: "req-p1", senderId: "demo-provider", text: "Got it, I can start Friday morning.", createdAt: "2026-09-02T09:25:00.000Z" }] });
     if (path === "/api/requests/req-p1/quote-details") return json(route, { details: [{ permit_required: true }] });
     if (path === "/api/requests/req-p1/permit" && req.method() === "GET") return json(route, { permit });
     if (path === "/api/requests/req-p1/permit" && req.method() === "PUT") { permit = { ...req.postDataJSON(), verified: false }; return json(route, { permit }); }
     if (path === "/api/requests/req-p1/intake-media" && req.method() === "GET") return json(route, { media: [] });
-    if (path === "/api/providers/requests/req-p1/quote" && req.method() === "POST") return json(route, { quote: { id: "q-p1" } }, 201);
+    if (path === "/api/providers/requests/req-p1/quote" && req.method() === "POST") { const body = req.postDataJSON(); sentQuote = { id: "q-p1", requestId: "req-p1", providerId: "demo-provider", providerName: "Mike Torres Plumbing", scope: body.scope, amountCents: body.totalCents, rankingScore: 90, rankingPolicyVersion: 3, ranking: { totalCents: body.totalCents, earliestStartAt: body.earliestStartAt, warrantyDays: body.warrantyDays, licenseVerified: true, insuranceVerified: true, rating: 4.7 } }; return json(route, { quote: sentQuote }, 201); }
     if (path === "/api/requests/req-p1/messages" && req.method() === "GET") return json(route, { messages: [] });
     return json(route, {});
   });

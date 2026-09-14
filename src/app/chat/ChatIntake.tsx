@@ -245,12 +245,16 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
     if (!trimmed && skippedIds.length === 0 && files.length === 0 && !translationsDirty) return;
     const attachmentNote = files.length ? `${files.length} ${locale === "es" ? "archivo(s) adjunto(s)" : "attachment(s) included"}` : "";
     const content = [trimmed, attachmentNote].filter(Boolean).join("\n");
-    const nextMessages = content ? [...messages, { role: "user" as const, content, locale }] : messages;
+    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    const answeredQuestion = trimmed ? assessment?.questions.find((question) => !skippedIds.includes(question.id)) : undefined;
+    const echoedQuestions = (assessment?.questions ?? []).filter((question) => (skippedIds.includes(question.id) || question.id === answeredQuestion?.id) && !lastAssistant?.content.includes(question.prompt));
+    const echoMessages = echoedQuestions.map((question) => ({ role: "assistant" as const, content: question.prompt, locale }));
+    const nextMessages = [...messages, ...echoMessages, ...(content ? [{ role: "user" as const, content, locale }] : [])];
 
     const attempt = async () => {
       setBusy(true);
       setError("");
-      if (content) setMessages(nextMessages);
+      if (nextMessages.length !== messages.length) setMessages(nextMessages);
       try {
         const form = new FormData();
         form.append("payload", JSON.stringify({

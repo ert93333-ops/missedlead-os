@@ -12,7 +12,7 @@ mkdirSync(OUT, { recursive: true });
 
 const blank = () => ({ requests: [], quotes: [], changes: [], jobs: [], disputes: [], evidence: [], payments: [], audit: [] });
 const json = (route, body, status = 200) => route.fulfill({ status, json: body });
-const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+const shot = async (page, name) => { await page.evaluate(() => document.querySelector(".chat-log")?.scrollTo({ top: 999999, behavior: "instant" })).catch(() => {}); await page.waitForTimeout(150); return page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true }); };
 
 const NAV = { waitUntil: "domcontentloaded", timeout: 240_000 };
 
@@ -40,7 +40,7 @@ async function customer(browser) {
     if (path === "/api/dashboard") return json(route, { ...dashboard });
     if (path === "/api/intake/analyze") {
       turn += 1;
-      if (turn === 1) return json(route, { reply: "Sorry about the leak. One safety check before we continue: do you smell gas or see any scorch marks near outlets?", locale: "en", issueCandidates: [], questions: [{ id: "safety-1", text: "Do you smell gas or see scorch marks near outlets?", requiredForSafety: true }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "tok-1" });
+      if (turn === 1) return json(route, { reply: "Sorry about the leak. One safety check before we continue: do you smell gas or see any scorch marks near outlets?", locale: "en", issueCandidates: [], questions: [{ id: "safety-1", prompt: "Do you smell gas or see scorch marks near outlets?", requiredForSafety: true }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "tok-1" });
       return json(route, { reply: "That is enough to prepare a provisional repair scope.", locale: "en", issueCandidates: [{ id: "trap-leak", label: "Drain trap leak", likelihood: "high", reason: "Dripping under the sink fits a loose trap connection.", evidenceNeeded: [] }, { id: "supply-line", label: "Worn supply line", likelihood: "medium", reason: "Steady drip can also come from a corroded supply line.", evidenceNeeded: [] }], questions: [], safety: { level: "normal", guidance: "" }, readyToConfirm: true, uncertaintyWarning: "A technician must inspect before the cause and final price are confirmed.", assessmentToken: "tok-2" });
     }
     if (path === "/api/intake/confirm") { dashboard.requests = [request]; dashboard.quotes = quotes; return json(route, { requestId: "req-maria", status: "intake", matchCount: 3 }, 201); }
@@ -61,7 +61,7 @@ async function customer(browser) {
   await page.getByText("I agree to secure AI processing", { exact: false }).click();
   await page.getByLabel("Describe the problem or answer the question").fill("Water is dripping under my kitchen sink and the cabinet floor is soaked.");
   await page.getByRole("button", { name: "Send" }).click();
-  await page.getByText("smell gas", { exact: false }).waitFor();
+  await page.getByText("smell gas", { exact: false }).first().waitFor();
   await shot(page, "c3-safety-question");
   await page.getByLabel("Describe the problem or answer the question").fill("No gas smell, no burn marks. Just the leak.");
   await page.getByRole("button", { name: "Send" }).click();

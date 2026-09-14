@@ -723,7 +723,8 @@ footer {
 .likelihood--medium { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 .likelihood--low { background: var(--surface-2); color: var(--faint); }
 
-.followup-questions { display: grid; gap: 10px; }
+.followup-questions { display: grid; gap: 8px; }
+.question-progress { margin: 0; color: var(--faint); font-family: var(--font-mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
 .followup-questions article { padding: 14px 16px; border-left: 3px solid var(--warn); border-radius: 4px var(--radius-sm) var(--radius-sm) 4px; background: var(--warn-soft); }
 .followup-questions p { margin: 0 0 11px; color: var(--text); line-height: 1.5; font-size: .92rem; }
 .followup-questions button { min-height: 38px; padding: .45rem .7rem; font-size: .78rem; }
@@ -736,6 +737,13 @@ footer {
 .safety-guidance--urgent { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
 .safety-guidance--emergency { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .safety-guidance p { margin: 5px 0 0; line-height: 1.55; color: inherit; }
+details.safety-collapsible { display: block; }
+.safety-collapsible summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; font-size: .88rem; }
+.safety-collapsible summary::-webkit-details-marker { display: none; }
+.safety-collapsible summary::after { content: "+"; margin-left: auto; font-family: var(--font-mono); font-size: 1rem; }
+.safety-collapsible[open] summary::after { content: "–"; }
+.safety-collapsible summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.issues-more { margin-top: 10px; min-height: 34px; padding: .35rem .75rem; font-size: .78rem; }
 
 .skip-warning, .chat-error { padding: 15px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); }
 .skip-warning p, .chat-error p { margin: 0 0 12px; line-height: 1.5; }

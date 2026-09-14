@@ -55,6 +55,10 @@ type Copy = {
   remove: string;
   examplesLabel: string;
   examples: string[];
+  questionStep: string;
+  moreIssues: string;
+  fewerIssues: string;
+  safetyUrgent: string;
 };
 
 const copy: Record<IntakeLocale, Copy> = {
@@ -93,6 +97,10 @@ const copy: Record<IntakeLocale, Copy> = {
     remove: "Remove",
     examplesLabel: "Not sure where to start? Try:",
     examples: ["Water is leaking under my kitchen sink", "An outlet stopped working", "My AC is running but not cooling", "No hot water from the water heater"],
+    questionStep: "Question {current} of {total}",
+    moreIssues: "Show more possibilities",
+    fewerIssues: "Show fewer",
+    safetyUrgent: "Important safety note — tap to read",
   },
   es: {
     title: "Cuéntenos qué pasó",
@@ -129,6 +137,10 @@ const copy: Record<IntakeLocale, Copy> = {
     remove: "Eliminar",
     examplesLabel: "¿No sabe por dónde empezar? Pruebe:",
     examples: ["Hay una fuga de agua bajo el fregadero", "Un enchufe dejó de funcionar", "El aire acondicionado no enfría", "No sale agua caliente"],
+    questionStep: "Pregunta {current} de {total}",
+    moreIssues: "Ver más posibilidades",
+    fewerIssues: "Ver menos",
+    safetyUrgent: "Nota de seguridad importante — toque para leer",
   },
 };
 
@@ -193,6 +205,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
   const [translationsDirty, setTranslationsDirty] = useState(initialState.translationsDirty);
   const [hiddenTranslations, setHiddenTranslations] = useState<number[]>([]);
   const [requiresReattach, setRequiresReattach] = useState(initialState.hadMedia);
+  const [showAllIssues, setShowAllIssues] = useState(false);
   const [pendingMediaRequest, setPendingMediaRequest] = useState<PendingMediaRequest | null>(initialState.pendingMediaRequest);
   const logRef = useRef<HTMLDivElement>(null);
   const storageKey = intakeStorageKey(accessToken, locale);
@@ -213,7 +226,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
     const state = readStoredIntake(accessToken, next);
     setLocale(next);
     onLocaleChange?.(next);
-    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setHiddenTranslations([]); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null);
+    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setHiddenTranslations([]); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false);
   };
 
   const addFiles = (incoming: File[]) => {
@@ -257,6 +270,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
         setSelectedIssueIds(body.issueCandidates.filter((candidate) => candidate.likelihood !== "low").map((candidate) => candidate.id));
         setSkipQuestionIds([]);
         setSkipAcknowledged(false);
+        setShowAllIssues(false);
         setTranslationsDirty(false);
         setDraft("");
       } catch (caught) {
@@ -349,9 +363,16 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange }: ChatIntak
       {busy && <div className="chat-message chat-message--assistant chat-message--thinking" aria-label={locale === "es" ? "Analizando" : "Analyzing"}><span/><span/><span/></div>}
 
       {assessment && !busy && <div className="assessment" data-testid="intake-assessment">
-        {assessment.safety.level !== "normal" && <div className={`safety-guidance safety-guidance--${assessment.safety.level}`} role="alert"><WarningIcon size={22}/><div><strong>{assessment.safety.level === "emergency" ? (locale === "es" ? "Posible emergencia" : "Possible emergency") : (locale === "es" ? "Atención urgente" : "Urgent attention")}</strong><p>{assessment.safety.guidance}</p></div></div>}
-        {assessment.issueCandidates.length > 0 && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}</section>}
-        {assessment.questions.length > 0 && <section className="followup-questions" aria-label={locale === "es" ? "Preguntas de seguimiento" : "Follow-up questions"}>{assessment.questions.map((question) => <article key={question.id}><p>{question.prompt}</p>{question.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(question.id) ? "selected" : ""} onClick={() => chooseSkip(question.id)}>{text.skip}</button>}</article>)}</section>}
+        {assessment.safety.level === "emergency" && <div className="safety-guidance safety-guidance--emergency" role="alert"><WarningIcon size={22}/><div><strong>{locale === "es" ? "Posible emergencia" : "Possible emergency"}</strong><p>{assessment.safety.guidance}</p></div></div>}
+        {assessment.safety.level !== "normal" && assessment.safety.level !== "emergency" && <details className={`safety-guidance safety-guidance--${assessment.safety.level} safety-collapsible`}><summary><WarningIcon size={18}/><strong>{text.safetyUrgent}</strong></summary><p>{assessment.safety.guidance}</p></details>}
+        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}</section>}
+        {(() => {
+          const openQuestions = assessment.questions.filter((question) => !skipQuestionIds.includes(question.id));
+          const activeQuestion = openQuestions[0];
+          if (!activeQuestion) return null;
+          const step = assessment.questions.length - openQuestions.length + 1;
+          return <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(step)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>;
+        })()}
         {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
         {translationsDirty && <div className="translation-sync"><button type="button" onClick={() => void runAnalysis()} disabled={busy || requiresReattach}>{text.saveTranslation}</button></div>}
         {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset><label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}

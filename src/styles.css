@@ -517,10 +517,24 @@ h1 em { color: var(--accent); font-style: normal; }
 .quote__rank { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .quote__best { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-deep); font: 600 .62rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
 .quote--best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow); }
-.prompt-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 4px 0 10px; }
-.prompt-chips > span { color: var(--muted); font-size: .8rem; flex-basis: 100%; }
-.prompt-chips button { min-height: 0; padding: .4rem .8rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: .8rem; text-align: left; }
-.prompt-chips button:hover { border-color: var(--accent); color: var(--accent-deep); }
+.intake-hero { margin: 6px 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.intake-hero__art { display: block; width: 100%; height: auto; }
+.intake-hero__body { padding: 16px 18px 18px; }
+.intake-hero__body h2 { margin: 0 0 6px; font-size: 1.25rem; letter-spacing: -.01em; }
+.intake-hero__body p { margin: 0 0 14px; color: var(--muted); font-size: .88rem; }
+.intake-hero__cta { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-weight: 650; font-size: .92rem; cursor: pointer; }
+.intake-hero__cta input { display: none; }
+.intake-hero__cta:hover { background: var(--accent-deep); }
+.intake-hero__cta:focus-within { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+.symptom-tiles { margin: 0 0 12px; }
+.symptom-tiles__label { display: block; margin: 0 0 8px; color: var(--muted); font-size: .82rem; font-weight: 600; }
+.symptom-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.symptom-grid button { display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 78px; padding: 12px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: .78rem; font-weight: 600; text-align: center; }
+.symptom-grid button svg { color: var(--accent); }
+.symptom-grid button:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 3px 10px rgb(0 0 0 / .06); }
+.symptom-grid button:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .symptom-grid button:hover { transform: none; box-shadow: none; } }
+@media (max-width: 340px) { .symptom-grid { grid-template-columns: repeat(2, 1fr); } }
 .schedule-hint { margin: 0; color: var(--muted); font-size: .85rem; }
 .job-context { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
 .slot { width: fit-content; padding: .28rem .55rem !important; color: var(--warn) !important; background: var(--warn-soft) !important; border-radius: var(--radius-sm); }

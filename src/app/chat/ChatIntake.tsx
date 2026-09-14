@@ -5,13 +5,18 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
-import { WarningIcon } from "../icons";
+import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, type IconComponent } from "../icons";
+import { IntakeScanArt } from "../illustrations";
 import { issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
 type DisplayMessage = IntakeMessage & { locale: IntakeLocale };
 type Translation = { original: string; translated: string; sourceLocale: IntakeLocale; targetLocale: IntakeLocale; warning: string; translationToken: string };
 type PendingMediaRequest = { requestId: string; assessmentToken: string };
+type SymptomId = "leak" | "drain" | "ac" | "hotwater" | "power" | "other";
+
+const symptomIcons: Record<SymptomId, IconComponent> = { leak: DropletIcon, drain: DrainIcon, ac: FanIcon, hotwater: ThermometerIcon, power: BoltIcon, other: HelpIcon };
+const fileAccept = "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/webm,audio/mp4,audio/wav,audio/x-wav";
 type StoredIntake = { messages: DisplayMessage[]; draft: string; assessment: IntakeAssessment | null; selectedIssueIds: string[]; skipQuestionIds: string[]; skipAcknowledged: boolean; uncertaintyAcknowledged: boolean; translations: Record<number, Translation>; translationsDirty: boolean; hadMedia: boolean; pendingMediaRequest: PendingMediaRequest | null };
 
 type ChatIntakeProps = {
@@ -54,8 +59,11 @@ type Copy = {
   saveTranslation: string;
   reattach: string;
   remove: string;
-  examplesLabel: string;
-  examples: string[];
+  heroTitle: string;
+  heroSub: string;
+  photoCta: string;
+  tilesLabel: string;
+  tiles: { id: SymptomId; label: string; message: string }[];
   questionStep: string;
   moreIssues: string;
   fewerIssues: string;
@@ -99,8 +107,18 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Save translation and continue",
     reattach: "For your privacy, attached files were not saved in this browser. Add them again before continuing.",
     remove: "Remove",
-    examplesLabel: "Not sure where to start? Try:",
-    examples: ["Water is leaking under my kitchen sink", "An outlet stopped working", "My AC is running but not cooling", "No hot water from the water heater"],
+    heroTitle: "Snap a photo — we’ll take it from there.",
+    heroSub: "AI-assisted intake plus licensed, insured local pros — serving Charlotte.",
+    photoCta: "Take or upload a photo",
+    tilesLabel: "Sound familiar? Tap one",
+    tiles: [
+      { id: "leak", label: "Water leak", message: "I found water leaking or pooling where it shouldn’t be." },
+      { id: "drain", label: "Clogged drain", message: "Water drains slowly or won’t drain at all." },
+      { id: "ac", label: "AC not cooling", message: "The AC is running but the house isn’t cooling down." },
+      { id: "hotwater", label: "No hot water", message: "No hot water — the water heater may be acting up." },
+      { id: "power", label: "No power", message: "An outlet or breaker stopped working." },
+      { id: "other", label: "Something else", message: "I have a different home repair issue." },
+    ],
     questionStep: "Question {current} of {total}",
     moreIssues: "Show more possibilities",
     fewerIssues: "Show fewer",
@@ -142,8 +160,18 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Guardar traducción y continuar",
     reattach: "Por su privacidad, los archivos adjuntos no se guardaron en este navegador. Agréguelos de nuevo antes de continuar.",
     remove: "Eliminar",
-    examplesLabel: "¿No sabe por dónde empezar? Pruebe:",
-    examples: ["Hay una fuga de agua bajo el fregadero", "Un enchufe dejó de funcionar", "El aire acondicionado no enfría", "No sale agua caliente"],
+    heroTitle: "Tome una foto — nosotros nos encargamos.",
+    heroSub: "Diagnóstico asistido por IA y técnicos locales con licencia y seguro — en Charlotte.",
+    photoCta: "Tome o suba una foto",
+    tilesLabel: "¿Le suena? Toque uno",
+    tiles: [
+      { id: "leak", label: "Fuga de agua", message: "Encontré una fuga o agua donde no debería estar." },
+      { id: "drain", label: "Drenaje tapado", message: "El agua drena lento o no drena." },
+      { id: "ac", label: "El aire no enfría", message: "El aire acondicionado funciona pero no enfría la casa." },
+      { id: "hotwater", label: "Sin agua caliente", message: "No hay agua caliente — puede ser el calentador." },
+      { id: "power", label: "Sin electricidad", message: "Un enchufe o breaker dejó de funcionar." },
+      { id: "other", label: "Otro problema", message: "Tengo otro problema de reparación en casa." },
+    ],
     questionStep: "Pregunta {current} de {total}",
     moreIssues: "Ver más posibilidades",
     fewerIssues: "Ver menos",
@@ -374,7 +402,15 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
 
     <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions">
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
-      {messages.length === 0 && !assessment && <div className="prompt-chips"><span>{text.examplesLabel}</span>{text.examples.map((example) => <button type="button" key={example} onClick={() => setDraft(example)}>{example}</button>)}</div>}
+      {messages.length === 0 && !assessment && <>
+        <div className="intake-hero">
+          <IntakeScanArt className="intake-hero__art"/>
+          <div className="intake-hero__body"><h2>{text.heroTitle}</h2><p>{text.heroSub}</p>
+            <label className="intake-hero__cta"><CameraIcon size={18}/>{text.photoCta}<input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
+          </div>
+        </div>
+        <div className="symptom-tiles"><span className="symptom-tiles__label">{text.tilesLabel}</span><div className="symptom-grid">{text.tiles.map((tile) => { const TileIcon = symptomIcons[tile.id]; return <button type="button" key={tile.id} onClick={() => void runAnalysis(tile.message)}><TileIcon size={22}/><span>{tile.label}</span></button>; })}</div></div>
+      </>}
       {messages.map((message, index) => <div className={`chat-message chat-message--${message.role}`} key={`${message.role}-${index}`}><span className="chat-message__sender">{message.role === "assistant" ? "WeCover" : locale === "es" ? "Usted" : "You"}</span><p>{message.content}</p><button type="button" className="translate-message" onClick={() => void translateMessage(index, message)} disabled={translatingIndex === index}>{translatingIndex === index ? text.translating : translations[index] && !hiddenTranslations.includes(index) ? (locale === "es" ? "Ocultar traducción" : "Hide translation") : text.translate}</button>{translations[index] && !hiddenTranslations.includes(index) && <div className="translation" lang={translations[index].targetLocale}><strong>{translations[index].targetLocale === "es" ? "Español" : "English"}</strong><p>{translations[index].translated}</p><small>{translations[index].warning}</small></div>}</div>)}
       {busy && <div className="chat-message chat-message--assistant chat-message--thinking" aria-label={locale === "es" ? "Analizando" : "Analyzing"}><span/><span/><span/></div>}
 
@@ -396,7 +432,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       {fileError && <p className="file-error" role="alert">{fileError}</p>}
       {requiresReattach && <p className="reattach-notice" role="alert">{text.reattach}</p>}
       <form onSubmit={(event) => { event.preventDefault(); void runAnalysis(draft); }}>
-        <label className="attachment-button" title={text.attach}><PaperclipIcon/><span>{text.attach}</span><input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/webm,audio/mp4,audio/wav,audio/x-wav" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
+        <label className="attachment-button" title={text.attach}><PaperclipIcon/><span>{text.attach}</span><input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
         <label className="sr-only" htmlFor="intake-message">{text.composerLabel}</label><textarea id="intake-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={activeQuestion ? text.answerPlaceholder : text.placeholder} rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runAnalysis(draft); } }}/>
         <button type="submit" className="send-button" aria-label={text.send} disabled={busy || requiresReattach || (!draft.trim() && skipQuestionIds.length === 0 && files.length === 0 && !translationsDirty) || (skipQuestionIds.length > 0 && !skipAcknowledged) || (files.length > 0 && !mediaConsent)}><SendIcon/></button>
       </form>

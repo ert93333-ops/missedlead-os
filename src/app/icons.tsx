@@ -87,3 +87,19 @@ export function EmptyBoxIcon(props: IconProps) {
 export function GaugeIcon(props: IconProps) {
   return svg(props, <><path d="M4 17a8.5 8.5 0 1 1 16 0"/><path d="M12 17l3.5-5.5"/><circle cx="12" cy="17" r="1.4"/></>);
 }
+
+export function DrainIcon(props: IconProps) {
+  return svg(props, <><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4"/></>);
+}
+
+export function SmellIcon(props: IconProps) {
+  return svg(props, <><path d="M8 21c-1.6-1.2-1.6-3 0-4.2s1.6-3 0-4.2"/><path d="M13 21c-1.6-1.2-1.6-3 0-4.2s1.6-3 0-4.2"/><path d="M18 21c-1.6-1.2-1.6-3 0-4.2s1.6-3 0-4.2"/><path d="M8 8c-1.6-1.2-1.6-3 0-4.2S9.6 1.5 8 .8" opacity=".55"/><path d="M13 8c-1.6-1.2-1.6-3 0-4.2S14.6 1.5 13 .8" opacity=".55"/><path d="M18 8c-1.6-1.2-1.6-3 0-4.2S19.6 1.5 18 .8" opacity=".55"/></>);
+}
+
+export function FanIcon(props: IconProps) {
+  return svg(props, <><circle cx="12" cy="12" r="1.6"/><path d="M12 10.4c0-3.4 1-6.4 3-6.4 1.6 0 2.4 1.2 2.4 2.6 0 2-2.2 3.4-5.4 3.8ZM13.6 12c3.4 0 6.4 1 6.4 3 0 1.6-1.2 2.4-2.6 2.4-2 0-3.4-2.2-3.8-5.4ZM12 13.6c0 3.4-1 6.4-3 6.4-1.6 0-2.4-1.2-2.4-2.6 0-2 2.2-3.4 5.4-3.8ZM10.4 12c-3.4 0-6.4-1-6.4-3 0-1.6 1.2-2.4 2.6-2.4 2 0 3.4 2.2 3.8 5.4Z"/></>);
+}
+
+export function HelpIcon(props: IconProps) {
+  return svg(props, <><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.2a2.6 2.6 0 0 1 5 1c0 1.7-2.3 2.2-2.6 3.6"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></>);
+}

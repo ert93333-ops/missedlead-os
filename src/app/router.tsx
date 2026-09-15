@@ -5,7 +5,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { type AuthValue, type Role } from "./auth";
 import { LockIcon, MessageIcon, ReceiptIcon, ShieldCheckIcon } from "./icons";
-import { HomeRepairScene } from "./illustrations";
+
 
 const paths: Record<Role, string> = { customer: "/customer", provider: "/provider", operator: "/operator" };
 
@@ -49,7 +49,7 @@ function AuthGate({ auth }: { auth: AuthValue }) {
   return <main className="auth-screen" data-testid="auth-gate">
     <div className="auth-split">
     <aside className="auth-scene" aria-hidden="true">
-      <HomeRepairScene/>
+      <img className="auth-scene__img" src="/img/login-hero.png" alt=""/>
       <div className="auth-scene__caption"><strong>Charlotte pilot</strong><span>Licensed pros · county permits verified · deposit protection</span></div>
     </aside>
     <section className="panel auth-card">

@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
 import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, type IconComponent } from "../icons";
-import { IntakeScanArt } from "../illustrations";
+
 import { issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
@@ -404,7 +404,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
       {messages.length === 0 && !assessment && <>
         <div className="intake-hero">
-          <IntakeScanArt className="intake-hero__art"/>
+          <img className="intake-hero__art" src="/img/intake-scan.png" alt=""/>
           <div className="intake-hero__body"><h2>{text.heroTitle}</h2><p>{text.heroSub}</p>
             <label className="intake-hero__cta"><CameraIcon size={18}/>{text.photoCta}<input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
           </div>

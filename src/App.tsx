@@ -9,7 +9,7 @@ import { RoleRouter } from "./app/router";
 import { ChatIntake } from "./app/chat/ChatIntake";
 import { AttachmentGallery } from "./app/chat/AttachmentGallery";
 import { BoltIcon, CalendarIcon, CameraIcon, CheckCircleIcon, ClipboardIcon, DocumentIcon, GaugeIcon, HouseIcon, LockIcon, MessageIcon, PlusIcon, ReceiptIcon, ShieldCheckIcon, WarningIcon, WrenchIcon } from "./app/icons";
-import { ProviderAvatar, Stars, ToolboxArt } from "./app/illustrations";
+import { ProviderAvatar, Stars } from "./app/illustrations";
 
 type ServiceRequest = { id: string; customerName: string; description: string; address: string; safetyStatus: "pending" | "cleared" | "blocked"; hazardReason?: string; status: string; providerIds: string[]; expandedSearch: boolean; workScopeSnapshot?:Record<string,unknown>; triageSnapshot?:Record<string,unknown>; priceDisclosure?:{source:string;sampleCount:number;updatedAt:string;confidence:number;priceCents?:number}; createdAt: string };
 type Quote = { id: string; requestId: string; providerId?: string; providerName: string; scope: string; amountCents: number; explorationSelected?:boolean; rankingScore: number; rankingPolicyVersion: number; ranking: { totalCents: number; earliestStartAt: string; warrantyDays: number; licenseVerified?: boolean; insuranceVerified?: boolean; rating?: number; distanceMiles?: number; responseMinutes?: number; languages?: string[] } };
@@ -186,7 +186,7 @@ function OperatorView({ dashboard, selected, disputes, busy, act, call }: { dash
     <section className="panel span-two"><div className="section-title"><p><ClipboardIcon size={14}/>SETTLEMENT · AUDIT LOG</p><h2>Settle after the protection period and dispute check</h2></div>{selected?.status === "completed" && <button className="primary" disabled={busy || selectedDisputes.some((item) => item.status === "open")} onClick={() => void act(async () => { const authorization = await call<Record<string, unknown>>(`/api/requests/${selected.id}/settlement-preflight`, "POST", {}); return call(`/api/requests/${selected.id}/settle`, "POST", authorization, crypto.randomUUID()); }, "Settlement executed.")}>Run settlement</button>}<div className="audit-list" data-testid="audit-log">{dashboard.audit.slice().reverse().map((item) => <div className="row" key={item.id}><code>{item.action}</code><span>{new Date(item.at).toLocaleString("en-US")}</span></div>)}</div></section></div>;
 }
 
-function Empty({ text }: { text: string }) { return <div className="empty"><ToolboxArt className="empty__art"/>{text}</div>; }
+function Empty({ text }: { text: string }) { return <div className="empty"><img className="empty__art" src="/img/empty-state.png" alt=""/>{text}</div>; }
 
 function MessageThread({ messages, selfId, selfLabel, otherLabel, locale }: { messages: ThreadMessage[]; selfId?: string; selfLabel: string; otherLabel: string; locale: "en" | "es" }) {
   if (!messages.length) return null;

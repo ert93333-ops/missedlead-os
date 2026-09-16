@@ -818,6 +818,7 @@ details.safety-collapsible { display: block; }
 .media-consent input { flex: 0 0 auto; width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); }
 .file-error { margin: 0 0 8px; color: var(--danger); font-size: .78rem; }
 .reattach-notice { margin: 0 0 8px; color: var(--warn); font-size: .76rem; line-height: 1.4; }
+.intake-nudge { margin: 10px 0 0; color: var(--faint); font-size: .8rem; line-height: 1.45; }
 .composer-notes { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; color: var(--faint); font-family: var(--font-mono); font-size: .68rem; line-height: 1.4; }
 .chat-intake__footer { padding: 8px 20px; border-top: 1px solid var(--line); color: var(--muted); background: var(--surface-2); font-family: var(--font-mono); font-size: .68rem; letter-spacing: .04em; line-height: 1.4; text-align: center; }
 

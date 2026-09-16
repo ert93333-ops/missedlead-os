@@ -71,6 +71,7 @@ type Copy = {
   answerPlaceholder: string;
   skipUndo: string;
   skipNote: string;
+  moreInfo: string;
   likelihood: Record<"high" | "medium" | "low", string>;
 };
 
@@ -127,6 +128,7 @@ const copy: Record<IntakeLocale, Copy> = {
     answerPlaceholder: "Type your answer…",
     skipUndo: "Undo skip",
     skipNote: "Skipped question:",
+    moreInfo: "I need a little more detail — describe what you see, or add another photo.",
     likelihood: { high: "high", medium: "medium", low: "low" },
   },
   es: {
@@ -181,6 +183,7 @@ const copy: Record<IntakeLocale, Copy> = {
     answerPlaceholder: "Escriba su respuesta…",
     skipUndo: "Deshacer omisión",
     skipNote: "Pregunta omitida:",
+    moreInfo: "Necesito un poco más de detalle — describa lo que ve o agregue otra foto.",
     likelihood: { high: "alta", medium: "media", low: "baja" },
   },
 };
@@ -216,9 +219,18 @@ function readStoredIntake(token: string, locale: IntakeLocale): StoredIntake {
   }
 }
 
+const ERROR_COPY: Record<string, { en: string; es: string }> = {
+  intake_request_in_progress: { en: "Still analyzing your previous message — please try again in a moment.", es: "Todavía estamos analizando su mensaje anterior — inténtelo de nuevo en un momento." },
+  media_consent_required: { en: "Please agree to secure processing of your files before sending.", es: "Acepte el procesamiento seguro de sus archivos antes de enviar." },
+  media_context_changed: { en: "Your attached files changed. Add them again and resend.", es: "Sus archivos adjuntos cambiaron. Agréguelos de nuevo y reenvíe." },
+  media_total_too_large: { en: "Your files are over the 50 MB total limit.", es: "Sus archivos superan el límite total de 50 MB." },
+};
+
 function apiError(status: number, body: unknown, locale: IntakeLocale) {
   if (status === 503) return locale === "es" ? "El asistente no está disponible en este momento. Sus datos siguen aquí; inténtelo de nuevo." : "The repair assistant is temporarily unavailable. Your details are still here — please try again.";
-  if (typeof body === "object" && body && "error" in body && typeof body.error === "string") return body.error;
+  const code = typeof body === "object" && body && "error" in body && typeof body.error === "string" ? body.error : undefined;
+  if (code && ERROR_COPY[code]) return ERROR_COPY[code][locale];
+  if (code) return code;
   return locale === "es" ? "No pudimos procesar su mensaje. Inténtelo de nuevo." : "We couldn’t process that message. Please try again.";
 }
 
@@ -411,6 +423,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         {assessment.safety.level !== "normal" && assessment.safety.level !== "emergency" && <details className={`safety-guidance safety-guidance--${assessment.safety.level} safety-collapsible`}><summary><WarningIcon size={18}/><strong>{text.safetyUrgent}</strong></summary><p>{assessment.safety.guidance}</p></details>}
         {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}</section>}
         {activeQuestion && <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(assessment.questions.length - openQuestions.length + 1)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>}
+        {!activeQuestion && !assessment.readyToConfirm && assessment.safety.level !== "emergency" && <p className="intake-nudge" role="note">{text.moreInfo}</p>}
         {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><div className="skip-undos">{assessment.questions.filter((question) => skipQuestionIds.includes(question.id)).map((question) => <button key={question.id} type="button" className="skip-undo" onClick={() => chooseSkip(question.id)}><span>{text.skipUndo}</span>{question.prompt}</button>)}</div><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
         {translationsDirty && <div className="translation-sync"><button type="button" onClick={() => void runAnalysis()} disabled={busy || requiresReattach}>{text.saveTranslation}</button></div>}
         {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset><label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}

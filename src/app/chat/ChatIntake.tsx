@@ -10,7 +10,7 @@ import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, Thermo
 import { issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
-type DisplayMessage = IntakeMessage & { locale: IntakeLocale };
+type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean };
 type Translation = { original: string; translated: string; sourceLocale: IntakeLocale; targetLocale: IntakeLocale; warning: string; translationToken: string };
 type PendingMediaRequest = { requestId: string; assessmentToken: string };
 type SymptomId = "leak" | "drain" | "ac" | "hotwater" | "power" | "other";
@@ -288,7 +288,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
     const answeredQuestion = trimmed ? assessment?.questions.find((question) => !skippedIds.includes(question.id)) : undefined;
     const echoedQuestions = (assessment?.questions ?? []).filter((question) => (skippedIds.includes(question.id) || question.id === answeredQuestion?.id) && !lastAssistant?.content.includes(question.prompt));
-    const echoMessages = echoedQuestions.map((question) => ({ role: "assistant" as const, content: question.prompt, locale }));
+    const echoMessages = echoedQuestions.map((question) => ({ role: "assistant" as const, content: question.prompt, locale, echo: true }));
     const nextMessages = [...messages, ...echoMessages, ...(content ? [{ role: "user" as const, content, locale }] : [])];
 
     const attempt = async () => {
@@ -299,7 +299,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         const form = new FormData();
         form.append("payload", JSON.stringify({
           locale,
-          history: nextMessages.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+          history: nextMessages.filter((message) => !message.echo).map(({ role, content: messageContent }) => ({ role, content: messageContent })),
           previousAssessmentToken: assessment?.assessmentToken,
           skipped: skippedIds.length ? { questionIds: skippedIds, warningAcknowledged: skipAcknowledged } : undefined,
           mediaConsent: files.length ? mediaConsent : undefined,

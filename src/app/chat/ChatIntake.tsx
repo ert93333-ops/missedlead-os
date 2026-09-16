@@ -10,7 +10,7 @@ import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, Thermo
 import { issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
-type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean };
+type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean; quoted?: string; note?: boolean };
 type Translation = { original: string; translated: string; sourceLocale: IntakeLocale; targetLocale: IntakeLocale; warning: string; translationToken: string };
 type PendingMediaRequest = { requestId: string; assessmentToken: string };
 type SymptomId = "leak" | "drain" | "ac" | "hotwater" | "power" | "other";
@@ -70,6 +70,7 @@ type Copy = {
   safetyUrgent: string;
   answerPlaceholder: string;
   skipUndo: string;
+  skipNote: string;
   likelihood: Record<"high" | "medium" | "low", string>;
 };
 
@@ -125,6 +126,7 @@ const copy: Record<IntakeLocale, Copy> = {
     safetyUrgent: "Important safety note — tap to read",
     answerPlaceholder: "Type your answer…",
     skipUndo: "Undo skip",
+    skipNote: "Skipped question:",
     likelihood: { high: "high", medium: "medium", low: "low" },
   },
   es: {
@@ -178,6 +180,7 @@ const copy: Record<IntakeLocale, Copy> = {
     safetyUrgent: "Nota de seguridad importante — toque para leer",
     answerPlaceholder: "Escriba su respuesta…",
     skipUndo: "Deshacer omisión",
+    skipNote: "Pregunta omitida:",
     likelihood: { high: "alta", medium: "media", low: "baja" },
   },
 };
@@ -239,9 +242,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
   const [lastAttempt, setLastAttempt] = useState<(() => Promise<void>) | null>(null);
   const [confirmationRetry, setConfirmationRetry] = useState<(() => Promise<void>) | null>(null);
   const [translations, setTranslations] = useState<Record<number, Translation>>(initialState.translations);
-  const [translatingIndex, setTranslatingIndex] = useState<number | null>(null);
   const [translationsDirty, setTranslationsDirty] = useState(initialState.translationsDirty);
-  const [hiddenTranslations, setHiddenTranslations] = useState<number[]>([]);
   const [requiresReattach, setRequiresReattach] = useState(initialState.hadMedia);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [pendingMediaRequest, setPendingMediaRequest] = useState<PendingMediaRequest | null>(initialState.pendingMediaRequest);
@@ -266,7 +267,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     const state = readStoredIntake(accessToken, next);
     setLocale(next);
     onLocaleChange?.(next);
-    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setHiddenTranslations([]); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false);
+    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false);
   };
 
   const addFiles = (incoming: File[]) => {
@@ -285,11 +286,10 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     if (!trimmed && skippedIds.length === 0 && files.length === 0 && !translationsDirty) return;
     const attachmentNote = files.length ? `${files.length} ${locale === "es" ? "archivo(s) adjunto(s)" : "attachment(s) included"}` : "";
     const content = [trimmed, attachmentNote].filter(Boolean).join("\n");
-    const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
     const answeredQuestion = trimmed ? assessment?.questions.find((question) => !skippedIds.includes(question.id)) : undefined;
-    const echoedQuestions = (assessment?.questions ?? []).filter((question) => (skippedIds.includes(question.id) || question.id === answeredQuestion?.id) && !lastAssistant?.content.includes(question.prompt));
-    const echoMessages = echoedQuestions.map((question) => ({ role: "assistant" as const, content: question.prompt, locale, echo: true }));
-    const nextMessages = [...messages, ...echoMessages, ...(content ? [{ role: "user" as const, content, locale }] : [])];
+    const quoted = answeredQuestion?.prompt;
+    const noteMessages = (assessment?.questions ?? []).filter((question) => skippedIds.includes(question.id)).map((question) => ({ role: "assistant" as const, content: `${text.skipNote} ${question.prompt}`, locale, echo: true, note: true }));
+    const nextMessages = [...messages, ...noteMessages, ...(content ? [{ role: "user" as const, content, locale, quoted }] : [])];
 
     const attempt = async () => {
       setBusy(true);
@@ -331,24 +331,6 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
   const chooseSkip = (questionId: string) => {
     setSkipQuestionIds((current) => current.includes(questionId) ? current.filter((id) => id !== questionId) : [...current, questionId]);
     setSkipAcknowledged(false);
-  };
-
-  const translateMessage = async (index: number, message: DisplayMessage) => {
-    if (translations[index]) return setHiddenTranslations((current) => current.includes(index) ? current.filter((value) => value !== index) : [...current, index]);
-    setTranslatingIndex(index);
-    setError("");
-    try {
-      const targetLocale: IntakeLocale = message.locale === "en" ? "es" : "en";
-      const response = await fetch("/api/intake/translate", { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ text: message.content, sourceLocale: message.locale, targetLocale }) });
-      const body = await response.json().catch(() => ({})) as Translation & { error?: string };
-      if (!response.ok) throw new Error(apiError(response.status, body, locale));
-      setTranslations((current) => ({ ...current, [index]: body }));
-      setTranslationsDirty(true);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : apiError(500, {}, locale));
-    } finally {
-      setTranslatingIndex(null);
-    }
   };
 
   const confirmRequest = async (event: FormEvent<HTMLFormElement>) => {
@@ -411,7 +393,15 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         </div>
         <div className="symptom-tiles"><span className="symptom-tiles__label">{text.tilesLabel}</span><div className="symptom-grid">{text.tiles.map((tile) => { const TileIcon = symptomIcons[tile.id]; return <button type="button" key={tile.id} onClick={() => void runAnalysis(tile.message)}><TileIcon size={22}/><span>{tile.label}</span></button>; })}</div></div>
       </>}
-      {messages.map((message, index) => <div className={`chat-message chat-message--${message.role}`} key={`${message.role}-${index}`}><span className="chat-message__sender">{message.role === "assistant" ? "WeCover" : locale === "es" ? "Usted" : "You"}</span><p>{message.content}</p><button type="button" className="translate-message" onClick={() => void translateMessage(index, message)} disabled={translatingIndex === index}>{translatingIndex === index ? text.translating : translations[index] && !hiddenTranslations.includes(index) ? (locale === "es" ? "Ocultar traducción" : "Hide translation") : text.translate}</button>{translations[index] && !hiddenTranslations.includes(index) && <div className="translation" lang={translations[index].targetLocale}><strong>{translations[index].targetLocale === "es" ? "Español" : "English"}</strong><p>{translations[index].translated}</p><small>{translations[index].warning}</small></div>}</div>)}
+      {messages.map((message, index) => {
+        if (message.note) return <div className="chat-note" key={`note-${index}`}>{message.content}</div>;
+        const next = messages[index + 1];
+        const hasPendingCard = index === messages.length - 1 && Boolean(activeQuestion);
+        const hasQuotedAnswer = next?.role === "user" && Boolean(next.quoted);
+        const content = message.role === "assistant" && (hasPendingCard || hasQuotedAnswer) ? message.content.replace(/[^.!?]*\?/g, "").replace(/\s{2,}/g, " ").trim() : message.content;
+        if (!content) return null;
+        return <div className={`chat-message chat-message--${message.role}`} key={`${message.role}-${index}`}><span className="chat-message__sender">{message.role === "assistant" ? "WeCover" : locale === "es" ? "Usted" : "You"}</span><p>{message.quoted && <small className="chat-message__quote">{message.quoted}</small>}{content}</p></div>;
+      })}
       {busy && <div className="chat-message chat-message--assistant chat-message--thinking" aria-label={locale === "es" ? "Analizando" : "Analyzing"}><span/><span/><span/></div>}
 
       {assessment && !busy && <div className="assessment" data-testid="intake-assessment">

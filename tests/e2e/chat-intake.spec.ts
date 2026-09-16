@@ -40,7 +40,6 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
       if (analysisCount === 1) return fulfill(route, 200, { reply: "The leak appears to be near the drain connection. Is it dripping only while water runs?", locale: "en", issueCandidates: [{ id: "trap-leak", label: "Loose or worn drain trap", likelihood: "high", reason: "The location and visible drip fit a drain connection leak.", evidenceNeeded: ["A close photo of the curved pipe"] }], questions: [{ id: "when-dripping", prompt: "Does it drip only while the faucet is running?", requiredForSafety: false }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "assessment-1" });
       expect(body).toContain('"questionIds":["when-dripping"]');
       expect(body).toContain('"warningAcknowledged":true');
-      expect(body).toContain('"translationToken":"translation-signed-1"');
       return fulfill(route, 200, { reply: "That is enough to prepare a provisional repair scope.", locale: "en", issueCandidates: [{ id: "trap-leak", label: "Loose or worn drain trap", likelihood: "high", reason: "The location and visible drip fit a drain connection leak.", evidenceNeeded: [] }], questions: [], safety: { level: "normal", guidance: "" }, readyToConfirm: true, uncertaintyWarning: "A technician must inspect the leak before the cause and final price are confirmed.", assessmentToken: "assessment-2" });
     }
     if (path === "/api/intake/confirm") {
@@ -69,10 +68,6 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
 
   await expect(page.getByText("Loose or worn drain trap")).toBeVisible();
   await expect(page.getByText("A technician must inspect", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Show Spanish translation" }).first().click();
-  await expect(page.getByText("Hay agua goteando debajo del fregadero.")).toBeVisible();
-  await expect(page.getByText("AI translation may be inaccurate", { exact: false })).toBeVisible();
-
   await page.getByRole("button", { name: "I’m not sure — skip" }).click();
   await page.getByText("You can skip this question", { exact: false }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-skip-warning-desktop.png", fullPage: true });

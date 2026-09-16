@@ -713,25 +713,9 @@ footer {
 .chat-message--user { margin-left: auto; }
 .chat-message--user .chat-message__sender { text-align: right; margin-right: 4px; }
 .chat-message--user p { border-radius: 16px 4px 16px 16px; background: var(--accent-deep); border-color: var(--accent-deep); color: #FFFFFF; }
-.translate-message {
-  min-height: 40px;
-  margin: 2px 4px 0;
-  padding: .55rem .25rem;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-size: .82rem;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  box-shadow: none !important;
-  transform: none !important;
-}
-.chat-message--user .translate-message { display: block; margin-left: auto; }
-.translation { margin-top: 7px; padding: 11px 13px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
-.translation strong { font-family: var(--font-mono); font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.translation p { margin: 5px 0 7px; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; }
-.translation small { display: block; color: var(--warn); font-size: .66rem; line-height: 1.45; }
+.chat-message__quote { display: block; margin: 0 0 7px; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--accent-soft); color: var(--accent-deep); font-size: .78rem; font-style: italic; }
+.chat-message--user .chat-message__quote { background: rgb(255 255 255 / .16); border-left-color: rgb(255 255 255 / .55); color: rgb(255 255 255 / .92); }
+.chat-note { margin: 2px auto; padding: 3px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); font-size: .72rem; text-align: center; }
 .translation-sync { display: flex; justify-content: flex-start; }
 .translation-sync button { border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: var(--warn-soft); color: var(--warn); }
 

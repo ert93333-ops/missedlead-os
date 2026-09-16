@@ -78,9 +78,32 @@ Use the reviewed diagnostic references as hypotheses, not proof. Manufacturer-sp
 
 export class GeminiIntakeProvider implements IntakeAiProvider {
   private readonly client: GoogleGenAI;
+  private readonly models: readonly string[];
 
-  constructor(apiKey: string, private readonly model = "gemini-2.5-flash") {
+  constructor(apiKey: string, model = "gemini-2.5-flash", fallbackModels: readonly string[] = []) {
     this.client = new GoogleGenAI({ apiKey });
+    this.models = [model, ...fallbackModels.filter((name) => name !== model)];
+  }
+
+  private get model() { return this.models[0]; }
+
+  private async generateWithFallback(request: Parameters<GoogleGenAI["models"]["generateContent"]>[0], timeoutMs: number) {
+    let lastError: unknown;
+    for (const model of this.models) {
+      try {
+        const config = request.config && typeof request.config === "object"
+          ? { ...request.config, abortSignal: AbortSignal.timeout(timeoutMs) }
+          : request.config;
+        return await this.client.models.generateContent({ ...request, model, config });
+      } catch (error) {
+        const status = z.object({ status: z.number().int().optional() }).safeParse(error).data?.status;
+        const retryable = status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name));
+        if (!retryable || model === this.models[this.models.length - 1]) throw error;
+        console.warn(`intake provider model ${model} failed (status ${status ?? "network"}); trying fallback`);
+        lastError = error;
+      }
+    }
+    throw lastError;
   }
 
   async analyze(input: AnalyzeInput): Promise<ModelAssessment> {
@@ -107,7 +130,7 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
         }
       }
       const parts: Part[] = [{ text: prompt }, ...mediaParts];
-      const response = await this.client.models.generateContent({
+      const response = await this.generateWithFallback({
         model: this.model,
         contents: [{ role: "user", parts }],
         config: {
@@ -119,7 +142,7 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
           responseJsonSchema: z.toJSONSchema(modelAssessmentWireSchema),
           abortSignal: AbortSignal.timeout(30_000),
         },
-      });
+      }, 30_000);
       if (!response.text) throw new IntakeProviderResponseError();
       const parsedJson: unknown = JSON.parse(response.text);
       return refineRemoteAssessment(normalizeModelAssessment(parsedJson, String(response.candidates?.[0]?.finishReason ?? "unknown"), input.skippedQuestionIds), input);
@@ -136,7 +159,7 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
 
   async translate(text: string, sourceLocale: IntakeLocale, targetLocale: IntakeLocale): Promise<string> {
     try {
-      const response = await this.client.models.generateContent({
+      const response = await this.generateWithFallback({
         model: this.model,
         contents: `Translate from ${sourceLocale} to ${targetLocale}. Preserve prices, measurements, names, warnings, and uncertainty exactly. Text:\n${text}`,
         config: {
@@ -147,7 +170,7 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
           responseJsonSchema: z.toJSONSchema(translationSchema),
           abortSignal: AbortSignal.timeout(20_000),
         },
-      });
+      }, 20_000);
       if (!response.text) throw new IntakeProviderResponseError();
       return translationSchema.parse(JSON.parse(response.text)).translated;
     } catch (error) {
@@ -159,5 +182,6 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
 
 export const createIntakeProvider = (env: NodeJS.ProcessEnv = process.env): IntakeAiProvider | undefined => {
   const apiKey = env.GEMINI_API_KEY;
-  return apiKey ? new GeminiIntakeProvider(apiKey, env.GEMINI_MODEL) : undefined;
+  const fallbacks = (env.GEMINI_FALLBACK_MODELS ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  return apiKey ? new GeminiIntakeProvider(apiKey, env.GEMINI_MODEL, fallbacks) : undefined;
 };

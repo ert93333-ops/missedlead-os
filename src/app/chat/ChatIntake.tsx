@@ -306,7 +306,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           translations: Object.values(translations).filter(({ translationToken }) => Boolean(translationToken)).map(({ original, translated, sourceLocale, targetLocale, translationToken }) => ({ original, translated, sourceLocale, targetLocale, translationToken })),
         }));
         files.forEach((file) => form.append("media", file, file.name));
-        const response = await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form });
+        const response = await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) });
         const body = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
         if (!response.ok) throw new Error(apiError(response.status, body, locale));
         setAssessment(body);
@@ -318,7 +318,8 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         setTranslationsDirty(false);
         setDraft("");
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : apiError(500, {}, locale));
+        const timedOut = caught instanceof Error && (caught.name === "TimeoutError" || caught.name === "AbortError");
+        setError(timedOut ? (locale === "es" ? "La respuesta está tardando demasiado. Inténtelo de nuevo." : "The response is taking too long. Please try again.") : caught instanceof Error ? caught.message : apiError(500, {}, locale));
       } finally {
         setBusy(false);
       }
@@ -346,6 +347,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
           body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address") }),
+          signal: AbortSignal.timeout(30_000),
         });
         const body = await response.json().catch(() => ({})) as { requestId?: string; error?: string };
         if (!response.ok || !body.requestId) throw new Error(apiError(response.status, body, locale));
@@ -358,7 +360,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           const upload = new FormData();
           upload.append("assessmentToken", pending.assessmentToken);
           files.forEach((file) => upload.append("media", file, file.name));
-          const uploadResponse = await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload });
+          const uploadResponse = await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload, signal: AbortSignal.timeout(120_000) });
           const uploadBody = await uploadResponse.json().catch(() => ({})) as { error?: string };
           if (!uploadResponse.ok) throw new Error(apiError(uploadResponse.status, uploadBody, locale));
         }

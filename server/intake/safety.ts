@@ -6,14 +6,14 @@ import type { IntakeLocale, ModelAssessment } from "./types.js";
 
 type Hazard = ModelAssessment["safety"]["hazards"][number];
 const HAZARD_PATTERNS: readonly { readonly hazard: Hazard; readonly pattern: RegExp }[] = [
-  { hazard: "gas", pattern: /\b(?:gas (?:smell|leak)|smell(?:ing)? (?:of )?gas|(?:huele|huelo|olemos) a gas|olor a gas|fuga de gas)\b/g },
+  { hazard: "gas", pattern: /\b(?:gas (?:smell|leak|odor)|smell(?:ing|s|ed)?(?:\s+(?:of|like|strong|a|the|bad))*\s+gas|(?:huele|huelo|olemos) a gas|olor a gas|fuga de gas)\b/g },
   { hazard: "fire", pattern: /\b(?:fire(?! (?:department|alarm|detector))|flames?|smoke(?! (?:detector|alarm))|fuego|llamas?|humo)\b/g },
   { hazard: "electrical", pattern: /\b(?:sparks?|live wires?|exposed wiring|electric shock|electrocut\w*|chispas?|cables? (?:vivos?|expuestos con corriente)|electrocuci\w*)\b/g },
   { hazard: "structural", pattern: /\b(?:structural collapse|ceiling (?:is )?falling|wall (?:is )?collapsing|colapso estructural|techo (?:se )?(?:cae|esta cayendo))\b/g },
   { hazard: "severe_flooding", pattern: /\b(?:severe flood(?:ing)?|rapid flooding|filling rapidly with water|water (?:is )?rising rapidly|inundacion grave|agua sube rapidamente)\b/g },
 ];
 // Negation is restricted to the matched observation, never the entire sentence.
-const NEGATED_OBSERVATION = /\b(?:no|not|without|don't|do not|doesn't|does not|isn't|is not|ningun|ninguna|sin)(?:\s+(?:hay|any|signs?|of|visible|active|obvious|detectable|see|seeing|smell|smelling|evidence|the|a|an|smoke|gas|fire|sparks?|flames?|humo|fuego|chispas?|olor|or|nor|ni|and|y|electrical|contact|standing|water|flooding|contacto|electrico|inundacion))*\s*$/;
+const NEGATED_OBSERVATION = /\b(?:no|not|without|don't|do not|doesn't|does not|isn't|is not|can't|cannot|cant|couldn't|could not|didn't|did not|ningun|ninguna|sin)(?:\s+(?:hay|any|signs?|of|visible|active|obvious|detectable|see|seeing|smell|smelling|evidence|the|a|an|smoke|gas|fire|sparks?|flames?|humo|fuego|chispas?|olor|or|nor|ni|and|y|electrical|contact|standing|water|flooding|contacto|electrico|inundacion))*\s*$/;
 const DENIAL_PREFIX = /^\s*(?:(?:there (?:is|are)|i (?:see|have|notice))\s+)?(?:no(?:\s+hay)?|without|sin|ningun[ao]?)\s+/;
 const OBSERVATION_PREDICATE = /\b(?:is|are|was|were|am|has|have|had|can|could|will|would|must|should|does|do|did|i|we|you|it|they|he|she|hay|esta|estan|estaba|tengo|tiene|tenemos|puedo|puede|veo|vemos|sale|salen|sube|suben|cae|caen|huele|huelo|olemos|aparece|aparecen|from|near|under|through|desde|cerca|sale|salen|comes?|appears?|rises?|billows?|emerges?|spreads?|continues?)\b/;
 const ACTIVE_PARTICIPLE = /\b(?!(?:flooding|wiring|ceiling|standing)\b)\w+(?:ing|ando|iendo)\b/;

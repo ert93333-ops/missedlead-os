@@ -93,6 +93,7 @@ const upload = multer({
 const actor = (response: Response): Actor => response.locals.actor as Actor;
 const accessToken = (request: Request): string => request.header("Authorization")?.slice(7) ?? "";
 const warning = "AI translation may be inaccurate. Confirm prices, scope, warranties, and legal terms before approval.";
+const MAX_FOLLOWUP_ANSWERS = 3;
 
 const parsePayload = (request: Request, response: Response): z.infer<typeof payloadSchema> | undefined => {
   if (typeof request.body.payload !== "string") {
@@ -201,7 +202,10 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const rawAssessment = normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions }), "unknown", skippedIds);
     const safetyAssessment = enforceSafetyFloor(rawAssessment, payload.history, payload.locale);
     const remainingQuestions = safetyAssessment.questions.filter((question) => question.requiredForSafety || !skippedIds.includes(question.id));
-    const assessment = { ...safetyAssessment, questions: remainingQuestions, readyToConfirm: safetyAssessment.readyToConfirm && safetyAssessment.issueCandidates.length > 0 && safetyAssessment.safety.level !== "emergency" && safetyAssessment.safety.hazards.length === 0 && remainingQuestions.length === 0 };
+    const followUpAnswers = payload.history.filter((message) => message.role === "user").length - 1;
+    const cappedQuestions = followUpAnswers >= MAX_FOLLOWUP_ANSWERS ? remainingQuestions.filter((question) => question.requiredForSafety) : remainingQuestions;
+    const exhausted = followUpAnswers >= MAX_FOLLOWUP_ANSWERS;
+    const assessment = { ...safetyAssessment, questions: cappedQuestions, readyToConfirm: (safetyAssessment.readyToConfirm || exhausted) && safetyAssessment.issueCandidates.length > 0 && safetyAssessment.safety.level !== "emergency" && safetyAssessment.safety.hazards.length === 0 && cappedQuestions.length === 0 };
     const signed = {
       version: 1 as const,
       assessmentId: randomUUID(), actorId: actor(response).id,

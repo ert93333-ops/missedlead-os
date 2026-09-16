@@ -79,7 +79,7 @@ export function registerActivityRoutes(app: Express) {
   app.get('/api/ops/permits', async (req, res) => {
     try {
       if (featureActor(res).role !== 'operator') throw new FeatureError(403, 'operator_required');
-      const { data, error } = await featureClient(req).from('job_permits').select('*,service_requests(description,address)').order('updated_at', { ascending: false }).limit(200);
+      const { data, error } = await featureClient(req).from('job_permits').select('*,service_requests(description,address:service_address)').order('updated_at', { ascending: false }).limit(200);
       if (error) throw error;
       return res.json({ permits: z.array(opsPermitView).parse(data) });
     } catch (error) { return featureError(res, error); }

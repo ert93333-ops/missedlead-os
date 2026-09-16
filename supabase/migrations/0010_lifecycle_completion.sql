@@ -8,7 +8,7 @@ create function public.set_service_zips(p_zips text[]) returns void language plp
 begin
  if not is_operator() then raise exception 'operator_required'; end if;
  if p_zips is null or cardinality(p_zips) not between 1 and 50 or exists(select 1 from unnest(p_zips) z where z is null or z !~ '^[0-9]{5}$') then raise exception 'invalid_zip_codes'; end if;
- delete from service_zips;
+ delete from service_zips where true;
  insert into service_zips(zip) select distinct unnest(p_zips);
  perform append_audit('coverage_updated',null,'coverage','pilot','operator updated service area',gen_random_uuid()::text);
 end $$;

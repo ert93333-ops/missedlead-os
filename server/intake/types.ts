@@ -89,6 +89,7 @@ export const signedAssessmentSchema = z.object({
   assessment: modelAssessmentSchema,
   skippedQuestionIds: z.array(z.string().min(1)).max(20),
   skippedQuestions: z.array(z.object({ id: z.string().min(1).max(48), prompt: z.string().min(1).max(500) })).max(20).default([]),
+  askedQuestions: z.array(z.string().min(1).max(500)).max(60).default([]),
   uncertaintyAcknowledged: z.boolean(),
   attachmentTypes: z.array(z.string().min(1)).max(10),
   attachmentNames: z.array(z.string().regex(/^[\p{L}\p{N}\p{M} _().-]{1,120}$/u)).max(10),

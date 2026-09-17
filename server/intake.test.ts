@@ -122,6 +122,34 @@ describe("chat intake", () => {
     expect(normalizeModelAssessment({ ...assessment(), readyToConfirm: false }).readyToConfirm).toBe(false);
   });
 
+  it("filters rephrased follow-up questions and converges when nothing new is asked", async () => {
+    const provider = new FakeIntakeProvider();
+    provider.next = assessment([{ id: "leak_timing", prompt: "Does it leak continuously or only when the tap runs?", requiredForSafety: false }], false);
+    const { app } = setup(provider);
+    const history = [{ role: "user", content: "Water is pooling under my kitchen sink" }];
+    const first = await analyze(app, { locale: "en", history }).expect(200);
+    expect(first.body.questions).toHaveLength(1);
+    provider.next = assessment([{ id: "leak_when", prompt: "Does the leak run continuously or only when the tap is on?", requiredForSafety: false }], false);
+    const second = await analyze(app, { locale: "en", history: [...history, { role: "assistant", content: first.body.reply }, { role: "user", content: "It drips even with the faucet off" }], previousAssessmentToken: first.body.assessmentToken }).expect(200);
+    expect(second.body.questions).toEqual([]);
+    expect(second.body.readyToConfirm).toBe(true);
+    // 턴1의 질문이 턴3에서 다시 재표현돼도 누적 이력으로 필터링된다
+    provider.next = assessment([{ id: "leak_again", prompt: "Is the leak constant, or does it only happen when running the tap?", requiredForSafety: false }], false);
+    const third = await analyze(app, { locale: "en", history: [...history, { role: "assistant", content: first.body.reply }, { role: "user", content: "It drips even with the faucet off" }, { role: "assistant", content: second.body.reply }, { role: "user", content: "Still dripping" }], previousAssessmentToken: second.body.assessmentToken }).expect(200);
+    expect(third.body.questions).toEqual([]);
+  });
+
+  it("keeps genuinely new follow-up questions even when topics overlap", async () => {
+    const provider = new FakeIntakeProvider();
+    provider.next = assessment([{ id: "leak_timing", prompt: "Does it leak continuously or only when the tap runs?", requiredForSafety: false }], false);
+    const { app } = setup(provider);
+    const history = [{ role: "user", content: "Water is pooling under my kitchen sink" }];
+    const first = await analyze(app, { locale: "en", history }).expect(200);
+    provider.next = assessment([{ id: "dishwasher", prompt: "Does the puddle grow when the dishwasher runs?", requiredForSafety: false }], false);
+    const second = await analyze(app, { locale: "en", history: [...history, { role: "assistant", content: first.body.reply }, { role: "user", content: "It drips even with the faucet off" }], previousAssessmentToken: first.body.assessmentToken }).expect(200);
+    expect(second.body.questions).toHaveLength(1);
+  });
+
   it("normalizes benign model-generated IDs and accepts the signed normalized issue", async () => {
     const provider = new FakeIntakeProvider();
     provider.next = { ...assessment(), issueCandidates: [{ ...assessment().issueCandidates[0], id: "FÚGA de Agua 1" }] };

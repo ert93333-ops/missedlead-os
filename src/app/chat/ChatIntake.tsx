@@ -190,6 +190,7 @@ const copy: Record<IntakeLocale, Copy> = {
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm", "video/quicktime", "audio/mpeg", "audio/webm", "audio/mp4", "audio/wav", "audio/x-wav"]);
 const megabyte = 1024 * 1024;
+const formatSize = (bytes: number) => bytes >= megabyte ? `${(bytes / megabyte).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 function accountIdFromToken(token: string) {
   try {
@@ -432,7 +433,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     </div>
 
     <div className="chat-composer">
-      {files.length > 0 && <div className="attachment-tray" aria-label={locale === "es" ? "Archivos adjuntos" : "Attachments"}>{files.map((file, index) => <div className="attachment" key={`${file.name}-${file.lastModified}`}><PhotoIcon size={18}/><span><strong>{file.name}</strong><small>{(file.size / megabyte).toFixed(1)} MB</small></span><button type="button" aria-label={`${text.remove} ${file.name}`} onClick={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}><CloseIcon/></button></div>)}</div>}
+      {files.length > 0 && <div className="attachment-tray" aria-label={locale === "es" ? "Archivos adjuntos" : "Attachments"}>{files.map((file, index) => <div className="attachment" key={`${file.name}-${file.lastModified}`}><PhotoIcon size={18}/><span><strong>{file.name}</strong><small>{formatSize(file.size)}</small></span><button type="button" aria-label={`${text.remove} ${file.name}`} onClick={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}><CloseIcon/></button></div>)}</div>}
       {files.length > 0 && <div className="media-consent"><p>{text.mediaPrivacy}</p><label><input type="checkbox" checked={mediaConsent} onChange={(event) => setMediaConsent(event.target.checked)}/><span>{text.mediaConsent}</span></label></div>}
       {fileError && <p className="file-error" role="alert">{fileError}</p>}
       {requiresReattach && <p className="reattach-notice" role="alert">{text.reattach}</p>}
@@ -441,7 +442,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         <label className="sr-only" htmlFor="intake-message">{text.composerLabel}</label><textarea id="intake-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={activeQuestion ? text.answerPlaceholder : text.placeholder} rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void runAnalysis(draft); } }}/>
         <button type="submit" className="send-button" aria-label={text.send} disabled={busy || requiresReattach || (!draft.trim() && skipQuestionIds.length === 0 && files.length === 0 && !translationsDirty) || (skipQuestionIds.length > 0 && !skipAcknowledged) || (files.length > 0 && !mediaConsent)}><SendIcon/></button>
       </form>
-      <div className="composer-notes"><span>{text.fileLimits}</span><span>{files.length}/10 · {(totalBytes / megabyte).toFixed(1)} MB</span></div>
+      <div className="composer-notes"><span>{text.fileLimits}</span><span>{files.length}/10 · {formatSize(totalBytes)}</span></div>
     </div>
     <footer className="chat-intake__footer">{text.payment}</footer>
   </section>;

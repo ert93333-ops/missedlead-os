@@ -202,10 +202,26 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const rawAssessment = normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions }), "unknown", skippedIds);
     const safetyAssessment = enforceSafetyFloor(rawAssessment, payload.history, payload.locale);
     const remainingQuestions = safetyAssessment.questions.filter((question) => question.requiredForSafety || !skippedIds.includes(question.id));
+    // 모델이 같은 질문을 말만 바꿔 다시 묻는 패턴 방지 — 이전 턴의 질문/같은 응답 내 질문과 토큰이 크게 겹치면 제거
+    const questionTokens = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2));
+    const seenPrompts = [...(previous?.askedQuestions ?? []), ...(previous?.assessment.questions ?? []).map((question) => question.prompt)];
+    const dedupedQuestions = remainingQuestions.filter((question) => {
+      if (question.requiredForSafety) return true;
+      const tokens = questionTokens(question.prompt);
+      const rephrase = seenPrompts.some((asked) => {
+        const askedTokens = questionTokens(asked);
+        const overlap = [...tokens].filter((token) => askedTokens.has(token)).length;
+        return overlap / Math.max(1, Math.min(tokens.size, askedTokens.size)) > 0.6;
+      });
+      if (!rephrase) seenPrompts.push(question.prompt);
+      return !rephrase;
+    });
     const followUpAnswers = payload.history.filter((message) => message.role === "user").length - 1;
-    const cappedQuestions = followUpAnswers >= MAX_FOLLOWUP_ANSWERS ? remainingQuestions.filter((question) => question.requiredForSafety) : remainingQuestions;
+    const cappedQuestions = followUpAnswers >= MAX_FOLLOWUP_ANSWERS ? dedupedQuestions.filter((question) => question.requiredForSafety) : dedupedQuestions;
     const exhausted = followUpAnswers >= MAX_FOLLOWUP_ANSWERS;
-    const assessment = { ...safetyAssessment, questions: cappedQuestions, readyToConfirm: (safetyAssessment.readyToConfirm || exhausted) && safetyAssessment.issueCandidates.length > 0 && safetyAssessment.safety.level !== "emergency" && safetyAssessment.safety.hazards.length === 0 && cappedQuestions.length === 0 };
+    // 모델의 남은 질문이 전부 재표현(rephrase)이라 제거된 경우 = 더 물을 게 없는 상태 → 수렴으로 간주
+    const outOfQuestions = remainingQuestions.length > 0 && dedupedQuestions.length === 0;
+    const assessment = { ...safetyAssessment, questions: cappedQuestions, readyToConfirm: (safetyAssessment.readyToConfirm || exhausted || outOfQuestions) && safetyAssessment.issueCandidates.length > 0 && safetyAssessment.safety.level !== "emergency" && safetyAssessment.safety.hazards.length === 0 && cappedQuestions.length === 0 };
     const signed = {
       version: 1 as const,
       assessmentId: randomUUID(), actorId: actor(response).id,
@@ -214,6 +230,7 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
       skippedQuestions,
       uncertaintyAcknowledged: previous?.uncertaintyAcknowledged === true || payload.skipped?.warningAcknowledged === true,
       attachmentTypes: media.map((item) => item.contentType), attachmentNames: files.map((file) => file.originalname), attachmentDigests: media.map((item) => item.digest),
+      askedQuestions: [...(previous?.askedQuestions ?? []), ...cappedQuestions.map((question) => question.prompt)].slice(-60),
       history: payload.history, translations,
     };
     let safetyReportStored: boolean | undefined;

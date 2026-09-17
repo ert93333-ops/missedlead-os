@@ -33,7 +33,7 @@ export const emergencyGuidance = (input: EmergencyInput): EmergencyResult | unde
     version: 1, assessmentId: randomUUID(), actorId: input.actorId,
     expiresAt: new Date(input.now.getTime() + 30 * 60_000).toISOString(),
     locale: input.locale, assessment, history: input.history.map(message => ({ ...message })),
-    skippedQuestionIds: [], skippedQuestions: [], uncertaintyAcknowledged: false,
+    skippedQuestionIds: [], skippedQuestions: [], askedQuestions: [], uncertaintyAcknowledged: false,
     attachmentTypes: [], attachmentNames: [], attachmentDigests: [], translations: [],
   };
   return { response: { ...assessment, locale: input.locale, assessmentToken: input.signer.sign(signed) }, signed };

@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
-import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, type IconComponent } from "../icons";
+import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
 
 import { issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
@@ -41,12 +41,16 @@ type Copy = {
   retry: string;
   possibleIssues: string;
   tentative: string;
+  materials: string;
+  materialsNote: string;
   evidence: string;
   safetyRequired: string;
   confirmTitle: string;
   confirmHelp: string;
   name: string;
   address: string;
+  accessNotes: string;
+  pets: string;
   uncertainty: string;
   confirm: string;
   confirming: string;
@@ -65,6 +69,7 @@ type Copy = {
   tilesLabel: string;
   tiles: { id: SymptomId; label: string; message: string }[];
   questionStep: string;
+  steps: [string, string, string];
   moreIssues: string;
   fewerIssues: string;
   safetyUrgent: string;
@@ -91,12 +96,16 @@ const copy: Record<IntakeLocale, Copy> = {
     retry: "Try again",
     possibleIssues: "What it might be",
     tentative: "These are possible issues based on what you shared. A technician must inspect the problem before confirming the cause.",
+    materials: "Likely materials & tools",
+    materialsNote: "A rough guess so the technician arrives prepared — confirmed on site.",
     evidence: "Helpful next photo or detail",
     safetyRequired: "This answer is needed for safety and can’t be skipped.",
     confirmTitle: "Review your repair request",
     confirmHelp: "Choose the possible issues that best match what you’re seeing. You can edit your name and service address before we look for technicians.",
     name: "Your name",
     address: "Service address",
+    accessNotes: "Entry instructions for the technician (optional — gate code, lockbox, call first)",
+    pets: "Pets at home? (optional — dog, cat, none)",
     uncertainty: "I understand this is a provisional scope, not a confirmed diagnosis, and the final quote may change after inspection.",
     confirm: "Confirm and find technicians",
     confirming: "Looking for technicians…",
@@ -122,6 +131,7 @@ const copy: Record<IntakeLocale, Copy> = {
       { id: "other", label: "Something else", message: "I have a different home repair issue." },
     ],
     questionStep: "Question {current} of {total}",
+    steps: ["Describe", "A few questions", "Review & confirm"],
     moreIssues: "Show more possibilities",
     fewerIssues: "Show fewer",
     safetyUrgent: "Important safety note — tap to read",
@@ -146,12 +156,16 @@ const copy: Record<IntakeLocale, Copy> = {
     retry: "Intentar de nuevo",
     possibleIssues: "Qué podría ser",
     tentative: "Estas son posibilidades según lo que compartió. Un técnico debe inspeccionar el problema para confirmar la causa.",
+    materials: "Materiales y herramientas probables",
+    materialsNote: "Una estimación para que el técnico llegue preparado — se confirma en el lugar.",
     evidence: "Próxima foto o dato útil",
     safetyRequired: "Esta respuesta es necesaria por seguridad y no se puede omitir.",
     confirmTitle: "Revise su solicitud",
     confirmHelp: "Elija los posibles problemas que coincidan con lo que ve. Puede editar su nombre y dirección antes de buscar técnicos.",
     name: "Su nombre",
     address: "Dirección del servicio",
+    accessNotes: "Instrucciones de acceso para el técnico (opcional — código de portón, caja de llaves, llame primero)",
+    pets: "¿Mascotas en casa? (opcional — perro, gato, ninguna)",
     uncertainty: "Entiendo que este alcance es provisional, no un diagnóstico confirmado, y que el presupuesto final puede cambiar después de la inspección.",
     confirm: "Confirmar y buscar técnicos",
     confirming: "Buscando técnicos…",
@@ -177,6 +191,7 @@ const copy: Record<IntakeLocale, Copy> = {
       { id: "other", label: "Otro problema", message: "Tengo otro problema de reparación en casa." },
     ],
     questionStep: "Pregunta {current} de {total}",
+    steps: ["Describir", "Algunas preguntas", "Revisar y confirmar"],
     moreIssues: "Ver más posibilidades",
     fewerIssues: "Ver menos",
     safetyUrgent: "Nota de seguridad importante — toque para leer",
@@ -359,7 +374,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         const response = await fetch("/api/intake/confirm", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address") }),
+          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), scopeDetails: { ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}), ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}) } }),
           signal: AbortSignal.timeout(30_000),
         });
         const body = await response.json().catch(() => ({})) as { requestId?: string; error?: string };
@@ -397,6 +412,14 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       <div className="language-switch" role="group" aria-label="Language"><button type="button" aria-pressed={locale === "en"} onClick={() => changeLocale("en")}>EN</button><button type="button" aria-pressed={locale === "es"} onClick={() => changeLocale("es")}>ES</button></div>
     </header>
 
+    <ol className="intake-steps" aria-label={locale === "es" ? "Progreso" : "Progress"}>
+      {text.steps.map((step, index) => {
+        const stage = !assessment ? (messages.length ? 1 : 0) : assessment.readyToConfirm ? 2 : 1;
+        const state = index < stage ? "done" : index === stage ? "current" : "todo";
+        return <li key={step} className={`intake-steps__step intake-steps__step--${state}`} aria-current={state === "current" ? "step" : undefined}><span className="intake-steps__dot"/>{step}</li>;
+      })}
+    </ol>
+
     <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions">
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
       {messages.length === 0 && !assessment && <>
@@ -422,12 +445,12 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       {assessment && !busy && <div className="assessment" data-testid="intake-assessment">
         {assessment.safety.level === "emergency" && <div className="safety-guidance safety-guidance--emergency" role="alert"><WarningIcon size={22}/><div><strong>{locale === "es" ? "Posible emergencia" : "Possible emergency"}</strong><p>{assessment.safety.guidance}</p></div></div>}
         {assessment.safety.level !== "normal" && assessment.safety.level !== "emergency" && <details className={`safety-guidance safety-guidance--${assessment.safety.level} safety-collapsible`}><summary><WarningIcon size={18}/><strong>{text.safetyUrgent}</strong></summary><p>{assessment.safety.guidance}</p></details>}
-        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}</section>}
+        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2><p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}</section>}
         {activeQuestion && <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(assessment.questions.length - openQuestions.length + 1)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>}
         {!activeQuestion && !assessment.readyToConfirm && assessment.safety.level !== "emergency" && <p className="intake-nudge" role="note">{text.moreInfo}</p>}
         {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><div className="skip-undos">{assessment.questions.filter((question) => skipQuestionIds.includes(question.id)).map((question) => <button key={question.id} type="button" className="skip-undo" onClick={() => chooseSkip(question.id)}><span>{text.skipUndo}</span>{question.prompt}</button>)}</div><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
         {translationsDirty && <div className="translation-sync"><button type="button" onClick={() => void runAnalysis()} disabled={busy || requiresReattach}>{text.saveTranslation}</button></div>}
-        {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset><label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}
+        {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset>{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}<label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label>{text.accessNotes}<input name="accessNotes" autoComplete="off"/></label><label>{text.pets}<input name="pets" autoComplete="off"/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}
       </div>}
       {error && <div className="chat-error" role="alert"><p>{error}</p>{(confirmationRetry || lastAttempt) && <button type="button" onClick={() => void (confirmationRetry ?? lastAttempt)?.()} disabled={busy || confirming || requiresReattach}>{text.retry}</button>}</div>}
     </div>

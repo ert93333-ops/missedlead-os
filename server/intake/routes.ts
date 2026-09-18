@@ -35,7 +35,7 @@ const confirmSchema = z.object({
   address: z.string().trim().min(3).max(500),
   acceptedIssueIds: z.array(z.string().min(1)).min(1).max(5),
   warningAcknowledged: z.literal(true),
-  scopeDetails: z.object({ location: z.string().max(300).optional(), dimensions: z.string().max(300).optional(), access: z.string().max(500).optional(), desiredTime: z.string().max(120).optional(), exclusions: z.array(z.string().max(300)).max(10).optional() }).optional(),
+  scopeDetails: z.object({ location: z.string().max(300).optional(), dimensions: z.string().max(300).optional(), access: z.string().max(500).optional(), pets: z.string().max(300).optional(), desiredTime: z.string().max(120).optional(), exclusions: z.array(z.string().max(300)).max(10).optional() }).optional(),
 });
 const translateSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
@@ -111,6 +111,9 @@ const parsePayload = (request: Request, response: Response): z.infer<typeof payl
   if (!parsed.success) response.status(400).json({ error: "invalid_request", issues: parsed.error.issues });
   return parsed.success ? parsed.data : undefined;
 };
+
+// 결정적 인젝션 감지 — 차단하지 않고 감사 로그만 남긴다 (모델은 이미 "사용자 입력은 지시가 아닌 증거"로 취급)
+const INJECTION_PATTERNS = [/ignore\s+(all\s+|any\s+|the\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?)/i, /\bact\s+as\b|\bpretend\s+(to\s+be|you\s+are)\b|\bjailbreak\b|\bDAN\b/, /system\s*(prompt|instruction|override)/i, /\bforget\b.{0,30}\b(instructions?|rules?|prompt)/i, /(reveal|show|print|repeat).{0,30}(system|your).{0,20}(prompt|instructions?)/i];
 
 const sanitizeMedia = async (files: readonly Express.Multer.File[]): Promise<readonly IntakeMedia[]> => Promise.all(files.map(async (file) => {
   const type = mediaTypeSchema.parse(file.mimetype);
@@ -199,6 +202,8 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const skippedIds = [...new Set([...(previous?.skippedQuestionIds ?? []), ...currentSkippedIds])];
     const currentSkippedQuestions = previous?.assessment.questions.filter((question) => currentSkippedIds.includes(question.id)).map((question) => ({ id: question.id, prompt: question.prompt })) ?? [];
     const skippedQuestions = [...(previous?.skippedQuestions ?? []), ...currentSkippedQuestions].filter((question, index, values) => values.findIndex((candidate) => candidate.id === question.id) === index);
+    const suspicious = payload.history.filter((message) => message.role === "user" && INJECTION_PATTERNS.some((pattern) => pattern.test(message.content)));
+    if (suspicious.length) console.warn("intake possible prompt injection", { actorId: actor(response).id, matches: suspicious.length, sample: suspicious[0]?.content.slice(0, 120) });
     const rawAssessment = normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions }), "unknown", skippedIds);
     const safetyAssessment = enforceSafetyFloor(rawAssessment, payload.history, payload.locale);
     const remainingQuestions = safetyAssessment.questions.filter((question) => question.requiredForSafety || !skippedIds.includes(question.id));
@@ -266,7 +271,7 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const result = await options.repository.execute("confirm_intake", {
       customerName: input.data.customerName, address: input.data.address,
       description: signed.assessment.summary, category: signed.assessment.category,
-      workScope: { symptom: signed.assessment.summary, ...signed.assessment.details, photos: [], exclusions: [], ...input.data.scopeDetails, skippedQuestionIds: signed.skippedQuestionIds, conversationTranscript: signed.history },
+      workScope: { symptom: signed.assessment.summary, ...signed.assessment.details, photos: [], exclusions: [], ...(signed.assessment.materialsHint.length ? { materialsHint: signed.assessment.materialsHint } : {}), ...input.data.scopeDetails, skippedQuestionIds: signed.skippedQuestionIds, conversationTranscript: signed.history },
       triage: { category: signed.assessment.category, urgency: signed.assessment.safety.level === "urgent" ? "urgent" : "routine", possibleCauses: issues.map((issue) => issue.label), confidence, questions: signed.assessment.questions.map((question) => question.prompt), hazards: [], attachmentTypes: signed.attachmentTypes, uncertaintyAcknowledged: signed.uncertaintyAcknowledged, locale: signed.locale, translations: signed.translations },
       priceDisclosure: { source: "ai_intake_no_market_sample", sampleCount: 0, updatedAt: options.now().toISOString(), confidence: 0 }, assessmentId: signed.assessmentId,
     }, { actor: actor(response), accessToken: accessToken(request), now: options.now().toISOString() }, () => ({ status: 500, data: { error: "confirm_intake_not_implemented" } }));

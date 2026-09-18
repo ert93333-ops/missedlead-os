@@ -25,7 +25,7 @@ export const emergencyGuidance = (input: EmergencyInput): EmergencyResult | unde
   const summary = input.locale === 'es' ? 'Se ha informado de un posible peligro inmediato.' : 'A possible immediate hazard was reported.';
   const assessment = enforceSafetyFloor({
     reply: summary, summary, category: 'handyman', issueCandidates: [], questions: [], details: {},
-    safety: { level: 'normal', hazards: [], guidance: '' }, readyToConfirm: false,
+    safety: { level: 'normal', hazards: [], guidance: '' }, materialsHint: [], readyToConfirm: false,
   }, input.history, input.locale);
   if (assessment.safety.level !== 'emergency') return undefined;
   if (!input.signer) return { response: { ...assessment, locale: input.locale, assessmentToken: 'safety-guidance-only' } };

@@ -35,6 +35,7 @@ export const modelAssessmentSchema = z.object({
   summary: z.string().trim().min(3).max(1_000),
   issueCandidates: z.array(issueCandidateSchema).max(5),
   questions: z.array(followupQuestionSchema).max(6),
+  materialsHint: z.array(z.string().trim().min(1).max(120)).max(6).default([]),
   details: z.object({
     location: z.string().trim().min(1).max(240).optional(),
     dimensions: z.string().trim().min(1).max(120).optional(),

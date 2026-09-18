@@ -192,6 +192,16 @@ fieldset legend { padding: 0 7px; color: var(--muted); font-family: var(--font-m
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .check-field { display: flex; align-items: center; gap: 9px; color: var(--text); font-size: .88rem; font-weight: 500; }
 .check-field input { flex: 0 0 auto; width: 18px; height: 18px; min-height: 0; }
+.check-row { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+
+.application-row { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.application-row:first-of-type { border-top: 0; }
+.application-detail { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.application-detail p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.document-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.document-link { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: .35rem .75rem; font-size: .78rem; }
+.document-upload { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.document-upload h3 { margin: 0 0 8px; font-size: .9rem; }
 .hazards { display: flex; gap: 14px; flex-wrap: wrap; }
 .hazards label { display: flex; align-items: center; }
 .hazards input { width: auto; }
@@ -770,6 +780,8 @@ details.safety-collapsible { display: block; }
 .materials-hint p { margin: 6px 0 4px; font-size: .84rem; line-height: 1.5; color: var(--muted); }
 .materials-hint small { font-size: .74rem; color: var(--faint); line-height: 1.45; }
 .job-context--materials { border-left: 2px solid var(--accent); padding-left: 10px; color: var(--muted); font-size: .84rem; }
+.match-actions { display: flex; gap: 10px; margin: 14px 0 4px; }
+.match-actions button { min-height: 40px; }
 
 .skip-warning, .chat-error { padding: 15px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); }
 .skip-warning p, .chat-error p { margin: 0 0 12px; line-height: 1.5; }

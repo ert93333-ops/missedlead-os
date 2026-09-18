@@ -6,7 +6,7 @@ export type LocalizedText = Readonly<Record<KnowledgeLocale, string>>;
 export type DiagnosticSource = { readonly title: string; readonly url: string; readonly accessedAt: string };
 export type DiagnosticRecord = {
   readonly id: string;
-  readonly category: 'plumbing' | 'hvac' | 'handyman' | 'emergency';
+  readonly category: 'plumbing' | 'electrical' | 'hvac' | 'painting' | 'pest_control' | 'handyman' | 'emergency';
   readonly title: LocalizedText;
   readonly signals: readonly (readonly string[])[];
   readonly candidateCauses: readonly string[];

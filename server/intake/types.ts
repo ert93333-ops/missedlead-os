@@ -4,7 +4,7 @@
 import { z } from "zod";
 
 export const localeSchema = z.enum(["en", "es"]);
-export const categorySchema = z.enum(["plumbing", "hvac", "handyman"]);
+export const categorySchema = z.enum(["plumbing", "electrical", "hvac", "painting", "pest_control", "handyman"]);
 export const likelihoodSchema = z.enum(["low", "medium", "high"]);
 export const safetyLevelSchema = z.enum(["normal", "urgent", "emergency"]);
 export const hazardSchema = z.enum(["gas", "fire", "structural", "electrical", "severe_flooding"]);

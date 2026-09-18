@@ -32,6 +32,7 @@ export type IntakeAssessment = {
     guidance: string;
   };
   readyToConfirm: boolean;
+  category?: string;
   materialsHint?: string[];
   uncertaintyWarning?: string;
   assessmentToken?: string;

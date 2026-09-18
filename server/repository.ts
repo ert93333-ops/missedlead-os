@@ -18,7 +18,7 @@ export type MoneyKind = "deposit" | "balance" | "payment_succeeded" | "settlemen
 export type CustomerPaymentKind = Extract<MoneyKind, "deposit" | "balance">;
 export interface RefundAllocation { paymentId: string; paymentIntentId: string; amountCents: number }
 export interface MoneyClaim { claimId: string; state: "claimed" | "completed"; amountCents: number; amountCentsDecimal?: string; destinationAccount?: string; providerReference?: string; providerIdempotencyKey?: string; requestId: string; allocations?: RefundAllocation[]; claimedAt?: string }
-export type IntakeCategory = "plumbing" | "hvac" | "handyman";
+export type IntakeCategory = "plumbing" | "electrical" | "hvac" | "painting" | "pest_control" | "handyman";
 export interface ServiceRequest { id: string; customerId: string; customerName: string; description: string; address: string; safetyStatus: "cleared" | "blocked"; hazardReason?: string; status: string; providerIds: string[]; expandedSearch: boolean; category?: IntakeCategory; workScopeSnapshot?: Record<string,unknown>; triageSnapshot?: Record<string,unknown>; priceDisclosure?: Record<string,unknown>; myMatchStatus?: string; createdAt: string }
 export interface Quote { id: string; requestId: string; providerId: string; providerName: string; scope: string; amountCents: number; ranking: { totalCents: number; earliestStartAt: string; warrantyDays: number; licenseVerified?:boolean; insuranceVerified?:boolean; rating?:number; distanceMiles?:number; responseMinutes?:number; languages?:string[] }; rankingScore?: number; rankingPolicyVersion?: number; explorationSelected?: boolean; createdAt: string }
 export interface Change { id: string; requestId: string; description: string; amountCents: number; items: Array<{ description: string; quantity: number; unitCents: number }>; evidenceIds: string[]; approvedAt?: string; createdAt: string }
@@ -73,10 +73,11 @@ const providerEligibleState=(state:RepositoryState,providerId:string,requestId:s
 const intakeObject=(value:unknown):Record<string,unknown>|undefined=>typeof value==="object"&&value!==null&&!Array.isArray(value)?structuredClone(Object.fromEntries(Object.entries(value))):undefined;
 const confirmIntakeInMemory=(state:RepositoryState,args:Record<string,unknown>,context:CommandContext):Result=>{
   if(context.actor.role!=="customer")return{status:403,data:{error:"customer_required"}};
-  const assessmentId=typeof args.assessmentId==="string"?args.assessmentId:"",category=args.category;
+  const assessmentId=typeof args.assessmentId==="string"?args.assessmentId:"",rawCategory=args.category;
+  const category=typeof rawCategory==="string"&&["plumbing","electrical","hvac","painting","pest_control","handyman"].includes(rawCategory)?rawCategory as IntakeCategory:undefined;
   const customerName=typeof args.customerName==="string"?args.customerName:"",address=typeof args.address==="string"?args.address:"",description=typeof args.description==="string"?args.description:"";
   const workScope=intakeObject(args.workScope),triage=intakeObject(args.triage),priceDisclosure=intakeObject(args.priceDisclosure);
-  if(!assessmentId||!customerName||!address||!description||(category!=="plumbing"&&category!=="hvac"&&category!=="handyman")||!workScope||!triage||!priceDisclosure)return{status:409,data:{error:"confirmed_intake_invalid"}};
+  if(!assessmentId||!customerName||!address||!description||!category||!workScope||!triage||!priceDisclosure)return{status:409,data:{error:"confirmed_intake_invalid"}};
   const idempotencyKey=`${context.actor.id}:${assessmentId}`,existingId=state.confirmedIntakes[idempotencyKey],existing=existingId?state.requests[existingId]:undefined;
   if(existing)return{status:201,data:{requestId:existing.id,status:existing.status,matchCount:existing.providerIds.length}};
   const requestId=`request_${++state.sequence}`;

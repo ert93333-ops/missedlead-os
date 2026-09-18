@@ -8,7 +8,7 @@ const future = z.iso.datetime({ offset: true }).refine(value => Date.parse(value
 export const applicationSchema = z.object({
   organizationName: z.string().trim().min(2).max(150), contactName: z.string().trim().min(2).max(100),
   contactEmail: z.email().max(254), contactPhone: z.string().trim().min(7).max(30),
-  categories: z.array(z.enum(['plumbing', 'electrical', 'hvac', 'handyman', 'general'])).min(1).max(5),
+  categories: z.array(z.enum(['plumbing', 'electrical', 'hvac', 'painting', 'pest_control', 'handyman', 'general'])).min(1).max(7),
   zipCodes: z.array(z.string().regex(/^\d{5}$/)).min(1).max(100), languages: z.array(z.enum(['en', 'es'])).min(1).max(2),
   availability: z.string().trim().min(3).max(1000), diagnosticFeeCents: cents,
   licenseNumber: z.string().trim().min(2).max(100), licenseExpiresAt: future, insuranceExpiresAt: future,

@@ -25,3 +25,33 @@ export function retrieveDiagnosticKnowledge(text: string, locale: KnowledgeLocal
   const emergencies = relevant.filter(record => record.category === 'emergency');
   return { locale, emergency: emergencies.length > 0, records: emergencies.length ? emergencies : relevant.slice(0, 5) };
 }
+
+const MEDIA_CATALOG_CAP = 30;
+
+/**
+ * 증상 텍스트 없이 미디어만 들어온 경우 모델에 건네는 한정 카탈로그.
+ * 응급 레코드는 항상 전부 포함하고, 일반 레코드는 카테고리별 라운드로빈으로
+ * 골라 모든 서비스 종류가 균형 있게 대표되도록 한다 (최대 MEDIA_CATALOG_CAP건).
+ */
+export function mediaReferenceCatalog(): readonly DiagnosticRecord[] {
+  const emergency = diagnosticKnowledge.filter(record => record.category === 'emergency');
+  const pools = new Map<string, DiagnosticRecord[]>();
+  for (const record of diagnosticKnowledge) {
+    if (record.category === 'emergency') continue;
+    const pool = pools.get(record.category) ?? [];
+    pool.push(record);
+    pools.set(record.category, pool);
+  }
+  const picked: DiagnosticRecord[] = [];
+  const buckets = [...pools.values()];
+  let progressed = true;
+  while (progressed && emergency.length + picked.length < MEDIA_CATALOG_CAP) {
+    progressed = false;
+    for (const bucket of buckets) {
+      if (emergency.length + picked.length >= MEDIA_CATALOG_CAP) break;
+      const next = bucket.shift();
+      if (next) { picked.push(next); progressed = true; }
+    }
+  }
+  return [...emergency, ...picked];
+}

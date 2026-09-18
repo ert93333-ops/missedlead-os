@@ -35,4 +35,9 @@ export const sources = {
   energyStarHvacMaintenance: researchedSource('U.S. ENERGY STAR: HVAC Maintenance Checklist', 'https://www.energystar.gov/saveathome/heating-cooling/maintenance-checklist'),
   doeAcMaintenance: researchedSource('U.S. Department of Energy: Maintaining Your Air Conditioner', 'https://www.energy.gov/energysaver/maintaining-your-air-conditioner'),
   epaSection608: researchedSource('U.S. EPA: Section 608 Technician Certification', 'https://www.epa.gov/section608/section-608-technician-certification-0'),
+  nfpaElectrical: researchedSource('NFPA: Electrical Safety in the Home', 'https://www.nfpa.org/education-and-research/home-fire-safety/electrical-safety-in-the-home'),
+  epaLeadRrp: researchedSource('U.S. EPA: Lead Renovation, Repair and Painting Program', 'https://www.epa.gov/lead/lead-renovation-repair-and-painting-program'),
+  epaTermites: researchedSource('U.S. EPA: Termites — How to Identify and Control Them', 'https://www.epa.gov/safepestcontrol/termites-how-identify-and-control-them'),
+  npmaPestGuide: researchedSource('NPMA PestWorld: Bug & Insect Identification Guide', 'https://www.pestworld.org/pest-guide/'),
+  cdcRodents: researchedSource('U.S. CDC: Controlling Wild Rodent Infestations', 'https://www.cdc.gov/healthy-pets/rodent-control/index.html'),
 } as const;

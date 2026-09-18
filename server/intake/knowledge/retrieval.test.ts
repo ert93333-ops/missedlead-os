@@ -2,7 +2,7 @@
  * 지식 검색 정규화·매칭 테스트.
  */
 import { describe, expect, it } from 'vitest';
-import { diagnosticKnowledge, retrieveDiagnosticKnowledge } from './index.js';
+import { diagnosticKnowledge, mediaReferenceCatalog, retrieveDiagnosticKnowledge } from './index.js';
 import { sources } from './sources.js';
 describe('source-backed diagnostic retrieval', () => {
   it.each([
@@ -43,6 +43,17 @@ describe('source-backed diagnostic retrieval', () => {
     ['El interruptor del aire acondicionado se dispara otra vez', 'es', 'hvac-repeated-breaker'],
     ['The heat pump has persistent frost and aux heat stays on', 'en', 'heat-pump-frost-aux'],
     ['La bomba de calor tiene hielo y calor auxiliar continuo', 'es', 'heat-pump-frost-aux'],
+    ['My kitchen outlet is dead', 'en', 'dead-outlet'],
+    ['The breaker keeps tripping when I use the microwave', 'en', 'breaker-trips'],
+    ['La luz del cuarto parpadea', 'es', 'flickering-lights'],
+    ['I want to repaint my living room walls', 'en', 'interior-repaint'],
+    ['La pintura de la pared se está descascarando', 'es', 'peeling-paint'],
+    ['Repaint the exterior siding on our two story home', 'en', 'exterior-painting'],
+    ['Ants are trailing across the kitchen counter', 'en', 'ants-indoors'],
+    ['Veo cucarachas en la cocina de noche', 'es', 'roaches'],
+    ['I found mouse droppings in the garage', 'en', 'rodent-signs'],
+    ['Mud tubes on the foundation and winged insects', 'en', 'termites'],
+    ['There is a wasp nest under the eave', 'en', 'wasp-nest'],
   ] as const)('retrieves an appropriate case for %s', (text, locale, id) => {
     const result = retrieveDiagnosticKnowledge(text, locale);
     expect(result.records.map(record => record.id)).toContain(id);
@@ -128,6 +139,23 @@ describe('source-backed diagnostic retrieval', () => {
       expect(source.accessedAt).toBe('2026-09-06');
       expect(source.title).toMatch(/Mecklenburg|U\.S\./);
     }
+  });
+});
+
+describe('media reference catalog', () => {
+  it('stays bounded while every category and all emergencies are represented', () => {
+    const catalog = mediaReferenceCatalog();
+    expect(catalog.length).toBeLessThanOrEqual(30);
+    expect(catalog.length).toBeGreaterThan(10);
+    const emergencyIds = diagnosticKnowledge.filter(record => record.category === 'emergency').map(record => record.id);
+    for (const id of emergencyIds) expect(catalog.map(record => record.id)).toContain(id);
+    const categories = new Set(diagnosticKnowledge.map(record => record.category));
+    for (const category of categories) expect(catalog.some(record => record.category === category)).toBe(true);
+  });
+  it('flags electrical emergency signs as emergency', () => {
+    const result = retrieveDiagnosticKnowledge('Sparks and a burning smell from the outlet', 'en');
+    expect(result.emergency).toBe(true);
+    expect(result.records.map(record => record.id)).toContain('electrical-warning');
   });
 });
 

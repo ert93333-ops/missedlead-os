@@ -464,6 +464,11 @@ h1 em { color: var(--accent); font-style: normal; }
 .pill.blocked::before { background: var(--danger); }
 .pill.pending { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
 .pill.pending::before { background: var(--warn); }
+.pill--category { color: var(--accent-deep); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.pill--category::before { display: none; }
+
+.category-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: .2rem .6rem; border-radius: 999px; font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--accent-deep); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); vertical-align: middle; }
+.check-field--category svg { color: var(--accent-deep); flex: 0 0 auto; }
 
 .warning { padding: 11px 13px; color: var(--warn); background: var(--warn-soft); border-radius: var(--radius-sm); font-size: .86rem; line-height: 1.55; }
 .danger-note { display: flex; align-items: flex-start; gap: 9px; padding: 11px 13px; color: var(--danger); background: var(--danger-soft); border-radius: var(--radius-sm); font-size: .88rem; line-height: 1.55; }

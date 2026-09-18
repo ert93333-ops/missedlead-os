@@ -107,3 +107,11 @@ export function PlusIcon(props: IconProps) {
 export function HelpIcon(props: IconProps) {
   return svg(props, <><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.2a2.6 2.6 0 0 1 5 1c0 1.7-2.3 2.2-2.6 3.6"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></>);
 }
+
+export function BugIcon(props: IconProps) {
+  return svg(props, <><rect x="8" y="8" width="8" height="11" rx="4"/><path d="M12 8V5"/><path d="M9 5.5 7.5 3.5M15 5.5 16.5 3.5"/><path d="M8 11H4M8 15H4.5M8 18.5H5M16 11h4M16 15h3.5M16 18.5h3"/><path d="M12 11v6"/></>);
+}
+
+export function PaintRollerIcon(props: IconProps) {
+  return svg(props, <><rect x="3" y="4" width="14" height="5" rx="1.5"/><path d="M17 6.5h3a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1h-8v2"/><rect x="10.5" y="14" width="3" height="7" rx="1"/></>);
+}

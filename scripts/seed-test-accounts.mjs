@@ -12,7 +12,8 @@ const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error("Supabase server configuration missing");
 const endpoint = new URL(url);
-if (!["127.0.0.1", "localhost"].includes(endpoint.hostname) || endpoint.port !== "56321") throw new Error("Refusing non-project demo database");
+const remoteOk = process.env.SEED_ALLOW_REMOTE === "1";
+if (!remoteOk && (!["127.0.0.1", "localhost"].includes(endpoint.hostname) || endpoint.port !== "56321")) throw new Error("Refusing non-project demo database (set SEED_ALLOW_REMOTE=1 for a cloud demo project)");
 const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const PASSWORD = "testtest";
@@ -37,7 +38,7 @@ for (const account of accounts) {
   if (result.error || !result.data.user) throw new Error(`${account.email}: ${result.error?.message ?? "no user"}`);
   const id = result.data.user.id;
   const profile = { id, role: account.role, display_name: account.name, is_demo: account.demo };
-  if (account.role === "provider") Object.assign(profile, { organization_name: account.name, provider_status: "approved", license_verified: true, license_expires_at: "2099-01-01T00:00:00Z", insurance_verified: true, insurance_expires_at: "2099-01-01T00:00:00Z", service_categories: ["plumbing", "hvac", "handyman"], service_areas: ["Charlotte", "28202"] });
+  if (account.role === "provider") Object.assign(profile, { organization_name: account.name, provider_status: "approved", license_verified: true, license_expires_at: "2099-01-01T00:00:00Z", insurance_verified: true, insurance_expires_at: "2099-01-01T00:00:00Z", service_categories: ["plumbing", "electrical", "hvac", "painting", "pest_control", "handyman"], service_areas: ["Charlotte", "28202"] });
   const saved = await client.from("profiles").upsert(profile);
   if (saved.error) throw new Error(`${account.email} profile: ${saved.error.message}`);
   if (account.role === "operator") {

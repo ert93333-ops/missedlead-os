@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:api\" \"pnpm dev:mobile\"",
     "dev:stable": "pnpm build && concurrently -k \"pnpm dev:api\" \"vite build --watch\" \"vite preview --host 127.0.0.1 --port 5194 --strictPort\"",

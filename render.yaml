@@ -1,0 +1,40 @@
+# Render Blueprint: single free web service serving the built UI + API.
+# Deploy: Render dashboard > New > Blueprint > pick this repo.
+# Required secrets (set in the Render dashboard when prompted):
+#   SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY - cloud project keys
+#   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY                  - same project, baked into the web build
+#   GEMINI_API_KEY                                            - intake AI
+services:
+  - type: web
+    name: wecover
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start:api
+    healthCheckPath: /api/capabilities
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: SERVE_STATIC
+        value: "1"
+      - key: PAYMENTS_ENABLED
+        value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

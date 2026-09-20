@@ -71,14 +71,22 @@ export function AuthProvider({ children }: { children: (auth: AuthValue) => Reac
     },
     signOut: async () => { setDemo(null); if (supabase) await supabase.auth.signOut(); },
     quickDemoLogin: demoAuthEnabled ? async (role) => {
-      const response = await fetch('/api/demo/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
-      });
-      const result = await response.json().catch(() => ({})) as { actor?: Actor; access_token?: string; error?: string };
-      if (!response.ok || !result.actor || !result.access_token) throw new Error(result.error ?? 'Demo access is unavailable.');
-      setDemo({ actor: result.actor, accessToken: result.access_token });
+      try {
+        const response = await fetch('/api/demo/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role }),
+        });
+        const result = await response.json().catch(() => ({})) as { actor?: Actor; access_token?: string };
+        if (response.ok && result.actor && result.access_token) {
+          setDemo({ actor: result.actor, accessToken: result.access_token });
+          return;
+        }
+      } catch {
+        // Visual demo access remains available when the optional demo database
+        // is not configured; production data requests still require a real session.
+      }
+      setDemo(demoSession(role));
     } : undefined,
     selectDemoActor: demoAuthEnabled ? (role) => setDemo(demoSession(role)) : undefined,
   }), [demo, loading, session]);

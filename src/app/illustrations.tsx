@@ -31,28 +31,6 @@ export function HomeRepairScene({ className }: { className?: string }) {
   </svg>;
 }
 
-export function IntakeScanArt({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 360 190" role="img" aria-label="A photo of a leaking drain being analyzed" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="360" height="190" fill="#C9D2DC"/>
-    <ellipse cx="180" cy="96" rx="150" ry="86" fill="#DDE3EA"/>
-    <circle cx="180" cy="96" r="58" fill="#8E99A6"/>
-    <circle cx="180" cy="96" r="58" stroke="#5B6570" strokeWidth="3"/>
-    <circle cx="180" cy="96" r="42" fill="none" stroke="#5B6570" strokeWidth="3"/>
-    <circle cx="180" cy="96" r="26" fill="none" stroke="#5B6570" strokeWidth="3"/>
-    <circle cx="180" cy="96" r="10" fill="#5B6570"/>
-    {[0, 60, 120, 180, 240, 300].map((deg) => <line key={deg} x1="180" y1="38" x2="180" y2="52" stroke="#5B6570" strokeWidth="3" transform={`rotate(${deg} 180 96)`}/>)}
-    <path d="M258 122s16 16 16 26a16 16 0 1 1-32 0c0-10 16-26 16-26Z" fill="#7FA8E8" stroke="#3E5E9E" strokeWidth="2.5" strokeLinejoin="round"/>
-    <path d="M296 60s11 11 11 18a11 11 0 1 1-22 0c0-7 11-18 11-18Z" fill="#7FA8E8" stroke="#3E5E9E" strokeWidth="2.5" strokeLinejoin="round"/>
-    <g stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round">
-      <path d="M26 44V30a6 6 0 0 1 6-6h14"/><path d="M334 44V30a6 6 0 0 0-6-6h-14"/>
-      <path d="M26 146v14a6 6 0 0 0 6 6h14"/><path d="M334 146v14a6 6 0 0 1-6 6h-14"/>
-    </g>
-    <rect x="138" y="14" width="84" height="24" rx="12" fill="#232A31"/>
-    <path d="M152 26h8l2-4h4l2 4h10l-3 6h-20Z" fill="#F2C14E"/>
-    <text x="186" y="30" fill="#FFFFFF" fontFamily="system-ui, sans-serif" fontSize="10" fontWeight="700" letterSpacing="1.2">AI SCAN</text>
-  </svg>;
-}
-
 export function ToolboxArt({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 120 96" role="img" aria-label="" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="14" y="34" width="92" height="48" rx="8" fill="var(--surface-2)" stroke="currentColor" strokeWidth="3"/>

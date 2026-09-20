@@ -447,7 +447,6 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
       {messages.length === 0 && !assessment && <>
         <div className="intake-hero">
-          <img className="intake-hero__art" src="/img/intake-scan.png" alt=""/>
           <div className="intake-hero__body"><h2>{text.heroTitle}</h2><p>{text.heroSub}</p>
             <label className="intake-hero__cta"><CameraIcon size={18}/>{text.photoCta}<input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
           </div>

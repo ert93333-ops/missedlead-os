@@ -142,6 +142,7 @@ const priceDisclosure=z.object({source:z.string().min(1),sampleCount:z.number().
 const requestDetails = z.object({ workScope:z.union([z.string().trim().min(10),structuredWorkScope]), triage:z.union([z.object({ urgency:z.enum(["routine","urgent","emergency"]),occupied:z.boolean(),utilitiesShutoffKnown:z.boolean() }),structuredTriage]), priceDisclosure:z.optional(priceDisclosure),priceDisclosureAccepted:z.literal(true).optional() }).superRefine((v,c)=>{if("hazards" in v.triage&&v.triage.hazards.length)c.addIssue({code:"custom",message:"hazard triage is blocked",path:["triage","hazards"]});if(v.triage.urgency==="emergency")c.addIssue({code:"custom",message:"emergency triage is blocked",path:["triage","urgency"]});if(!v.priceDisclosure&&!v.priceDisclosureAccepted)c.addIssue({code:"custom",message:"price disclosure required",path:["priceDisclosure"]})});
 export const maskMessage=(text:string)=>text
   .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,"[email masked]")
+  .replace(/\b\d{3}-\d{2}-\d{4}\b/g,"[ssn masked]")
   .replace(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g,"[phone masked]");
 const body = <T>(schema: z.ZodType<T>, req: Request, res: Response) => { const parsed = schema.safeParse(req.body); if (!parsed.success) res.status(400).json({ error: "invalid_request", issues: parsed.error.issues }); return parsed.success ? parsed.data : undefined; };
 const actor = (res: Response) => res.locals.actor as Actor;

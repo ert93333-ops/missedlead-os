@@ -20,6 +20,12 @@ test("message contact masking removes raw phone and email",()=>{
   expect(value).not.toContain("@");
 });
 
+test("message contact masking removes US Social Security numbers",()=>{
+  const value=maskMessage("my ssn is 123-45-6789, call 704-555-1212");
+  expect(value).toBe("my ssn is [ssn masked], call [phone masked]");
+  expect(value).not.toContain("123-45-6789");
+});
+
 test("15 percent exploration and composite quote ordering are deterministic",()=>{
   const requestId="req-ranking";
   const selections=Array.from({length:1000},(_,index)=>explorationSelected(requestId,`provider-${index}`));

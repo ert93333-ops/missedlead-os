@@ -1,0 +1,2 @@
+-- Mask US Social Security numbers in chat messages alongside email/phone.
+create or replace function n_contact_details(p_text text) returns text language sql immutable as $$select regexp_replace(regexp_replace(regexp_replace(p_text,'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}','[email n]','gi'),'(\+?1[ .-]?)?(\([0-9]{3}\)|[0-9]{3})[ .-]?[0-9]{3}[ .-]?[0-9]{4}','[phone n]','g'),'\m[0-9]{3}-[0-9]{2}-[0-9]{4}\M','[ssn n]','g')$$;

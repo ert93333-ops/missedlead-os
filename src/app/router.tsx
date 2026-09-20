@@ -46,6 +46,9 @@ export function RoleRouter({ auth, render }: { auth: AuthValue; render: (role: R
 function AuthGate({ auth }: { auth: AuthValue }) {
   const { signIn } = auth;
   const [message, setMessage] = useState("Enter your email and we’ll send you a secure sign-in link.");
+  const enterDemo = (role: Role) => {
+    void auth.quickDemoLogin?.(role).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Demo access is unavailable."));
+  };
   return <main className="auth-screen" data-testid="auth-gate">
     <div className="auth-split">
     <aside className="auth-scene" aria-hidden="true">
@@ -67,7 +70,21 @@ function AuthGate({ auth }: { auth: AuthValue }) {
         <li><LockIcon size={15}/>20% deposit and a 72-hour review window before final payment</li>
         <li><MessageIcon size={15}/>Bilingual support — English and Spanish</li>
       </ul>
-      {auth.selectDemoActor && <div className="demo-actors" data-testid="demo-actor-selector"><strong>Demo access · local only</strong>{(["customer", "provider", "operator"] as const).map((role) => <button key={role} type="button" data-testid={`demo-${role}`} onClick={() => auth.selectDemoActor?.(role)}>{role}</button>)}</div>}
+      {auth.quickDemoLogin && <div className="demo-actors" data-testid="demo-actor-selector">
+        <strong>Test access · no sign-in</strong>
+        <span>Use a role workspace instantly while developing. These buttons are disabled outside local/demo builds.</span>
+        <div className="demo-actors__actions">
+          <button key="customer" type="button" data-testid="demo-customer" onClick={() => enterDemo("customer")}>
+            <b>Customer</b><small>New repair intake</small>
+          </button>
+          <button key="provider" type="button" data-testid="demo-provider" onClick={() => enterDemo("provider")}>
+            <b>Provider</b><small>Jobs and quotes</small>
+          </button>
+          <button key="operator" type="button" data-testid="demo-operator" onClick={() => enterDemo("operator")}>
+            <b>Admin</b><small>Operations console</small>
+          </button>
+        </div>
+      </div>}
     </section>
     </div>
   </main>;

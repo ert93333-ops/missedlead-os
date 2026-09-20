@@ -79,6 +79,11 @@ consoleErrors.length = 0; // the rejected login above is an expected 400 — don
 sec("customer");
 await login(ACCOUNTS.customer);
 check("customer workspace mounts", await visible('[data-testid="customer-intake"], [data-testid$="-workspace"]'));
+const newRequest = page.locator('button:has-text("New request"), button:has-text("Nueva solicitud")');
+if (await newRequest.count()) {
+  await newRequest.first().click();
+  await page.waitForSelector('[data-testid="customer-intake"], .chat-intake', { timeout: 15_000 });
+}
 await shot("03-customer-intake");
 check("intake stepper visible", await visible(".intake-steps, [class*=step]") || await txt(/describe|questions|confirm/i));
 check("media consent UI exists or attach button", await visible('input[type="file"], [data-testid*="attach"], button:has-text("Attach"), button:has-text("photo")'));

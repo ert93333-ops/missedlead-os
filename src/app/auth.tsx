@@ -15,6 +15,7 @@ export type AuthValue = {
   loading: boolean;
   signIn: (email: string, password?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  quickDemoLogin?: (role: Role) => Promise<void>;
   selectDemoActor?: (role: Role) => void;
 };
 
@@ -69,6 +70,16 @@ export function AuthProvider({ children }: { children: (auth: AuthValue) => Reac
       if (error) throw error;
     },
     signOut: async () => { setDemo(null); if (supabase) await supabase.auth.signOut(); },
+    quickDemoLogin: demoAuthEnabled ? async (role) => {
+      const response = await fetch('/api/demo/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const result = await response.json().catch(() => ({})) as { actor?: Actor; access_token?: string; error?: string };
+      if (!response.ok || !result.actor || !result.access_token) throw new Error(result.error ?? 'Demo access is unavailable.');
+      setDemo({ actor: result.actor, accessToken: result.access_token });
+    } : undefined,
     selectDemoActor: demoAuthEnabled ? (role) => setDemo(demoSession(role)) : undefined,
   }), [demo, loading, session]);
 

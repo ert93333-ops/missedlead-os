@@ -311,9 +311,16 @@ fieldset legend { padding: 0 7px; color: var(--muted); font-family: var(--font-m
 .auth-trust li::before { content: "✓"; flex: 0 0 auto; color: var(--ok); font-weight: 700; }
 .auth-trust li:has(svg)::before { display: none; }
 .auth-trust li svg { flex: 0 0 auto; margin-top: 2px; color: var(--ok); }
-.demo-actors { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--line); }
-.demo-actors strong { width: 100%; color: var(--warn); font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
-.demo-actors button { min-height: 34px; padding: .35rem .75rem; font-size: .78rem; text-transform: capitalize; }
+.demo-actors { display: grid; gap: 8px; margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--line); }
+.demo-actors strong { color: var(--warn); font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+.demo-actors > span { color: var(--muted); font-size: .78rem; line-height: 1.45; }
+.demo-actors__actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.demo-actors__actions button { display: grid; gap: 3px; min-height: 58px; padding: .55rem .65rem; text-align: left; }
+.demo-actors__actions b { color: var(--text); font-size: .82rem; }
+.demo-actors__actions small { color: var(--muted); font-size: .68rem; line-height: 1.2; }
+@media (max-width: 520px) {
+  .demo-actors__actions { grid-template-columns: 1fr; }
+}
 
 /* ---------- Hero / trust card --------------------------------------------- */
 

@@ -1,27 +1,56 @@
 # WeCover 협업 작업 가이드
 
-## 작업 종료 규칙
+## 필수 작업 시작 명령
+
+모든 협업자는 작업을 시작할 때 아래 명령을 순서대로 실행합니다.
+
+   ```sh
+git fetch origin
+   git status --short --branch
+git pull --rebase origin master
+git log -3 --oneline
+   ```
+
+`git status`에 다른 작업자의 변경이 있으면 덮어쓰지 말고 먼저 범위를 확인합니다. `git reset --hard`, `git clean -fd`, `git checkout -- .`, 무분별한 `git stash`는 사용하지 않습니다.
+
+## 필수 작업 종료 명령
+
+모든 협업자는 작업을 끝내기 전에 아래 명령을 실행합니다.
 
 1. 변경 범위를 확인합니다.
    ```sh
    git status --short
    git diff --stat
+   git diff --check
    ```
-2. 관련 검증을 실행합니다. 웹 변경은 최소한 `pnpm test && pnpm build`를 실행하고, 모바일 변경은 `pnpm --dir mobile typecheck && pnpm test:mobile`를 추가합니다.
+2. 관련 검증을 실행합니다.
+   ```sh
+   # 웹/API 변경
+   pnpm test && pnpm build
+
+   # 모바일 변경
+   pnpm --dir mobile typecheck && pnpm test:mobile
+
+   # UI 흐름 변경
+   node scripts/persona-matrix-ui.mjs
+   ```
+   변경 범위에 맞지 않는 명령은 생략 사유를 커밋 또는 인수인계 기록에 남깁니다.
 3. 작업 목적이 드러나는 작은 커밋을 만듭니다.
    ```sh
    git add <변경 파일>
    git commit -m "Short imperative change description"
    git push origin master
    ```
-4. 협업자가 이어서 볼 수 있도록 커밋 메시지와 이 문서 또는 관련 배포 문서에 현재 상태와 남은 주의점을 기록합니다.
-5. 푸시 후 원격 상태를 확인합니다.
+4. 협업자가 이어서 볼 수 있도록 현재 상태, 검증 결과, 남은 주의점을 인수인계 문서 또는 관련 문서에 기록합니다.
+5. 푸시 후 원격 최신화와 작업 트리 깨끗함을 확인합니다.
    ```sh
+   git fetch origin
    git status --short --branch
    git log -1 --oneline
+   git diff origin/master --exit-code
    ```
 
-커밋하지 않은 다른 사람의 변경은 포함하거나 되돌리지 않습니다. 비밀값, `.env` 파일, 토큰, 서비스 키는 커밋하지 않습니다.
+`git diff origin/master --exit-code`가 실패하면 push가 완료되지 않은 것이므로 작업을 끝내지 않습니다. 커밋하지 않은 다른 사람의 변경은 포함하거나 되돌리지 않습니다. 비밀값, `.env` 파일, 토큰, 서비스 키는 커밋하지 않습니다.
 
 ## 현재 서비스
 

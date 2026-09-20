@@ -67,7 +67,7 @@ git log -3 --oneline
 
 - Render 무료 서비스: `https://wecover.onrender.com`
 - Blueprint: Render dashboard의 `wecover` blueprint
-- 저장소: `ert93333-ops/missedlead-os`, `master`
+- 저장소: `missedlead-os/missedlead-os`, `master`
 - 결제: `PAYMENTS_ENABLED=false`
 - 배포 설정: `render.yaml`
 - 무료 Render 인스턴스는 유휴 시 sleep할 수 있습니다. 첫 요청은 cold start로 느릴 수 있습니다.

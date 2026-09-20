@@ -10,7 +10,9 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # NODE_ENV=production is set at runtime, but the TypeScript/Vite build
+    # needs the checked-in dev toolchain (typescript, vite, and their types).
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
     startCommand: pnpm start:api
     healthCheckPath: /api/capabilities
     envVars:

@@ -18,6 +18,25 @@ type SymptomId = "leak" | "drain" | "ac" | "hotwater" | "power" | "other";
 const symptomIcons: Record<SymptomId, IconComponent> = { leak: DropletIcon, drain: DrainIcon, ac: FanIcon, hotwater: ThermometerIcon, power: BoltIcon, other: HelpIcon };
 const fileAccept = "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/webm,audio/mp4,audio/wav,audio/x-wav";
 type StoredIntake = { messages: DisplayMessage[]; draft: string; assessment: IntakeAssessment | null; selectedIssueIds: string[]; skipQuestionIds: string[]; skipAcknowledged: boolean; uncertaintyAcknowledged: boolean; translations: Record<number, Translation>; translationsDirty: boolean; hadMedia: boolean; pendingMediaRequest: PendingMediaRequest | null };
+const demoAssessment = (locale: IntakeLocale, content: string): IntakeAssessment => ({
+  reply: locale === "es"
+    ? "Veo una posible fuga o problema de drenaje. Para una orientación más precisa, comparta una foto del área y del agua."
+    : "This sounds like a possible leak or drain issue. For a clearer first read, share a photo of the area and the water.",
+  locale,
+  issueCandidates: [{
+    id: "demo-drain-leak",
+    label: locale === "es" ? "Fuga o drenaje bajo el fregadero" : "Leak or drain issue under the sink",
+    likelihood: "medium",
+    reason: content || (locale === "es" ? "El síntoma coincide con problemas comunes de plomería." : "The symptom matches a common plumbing issue."),
+    evidenceNeeded: [locale === "es" ? "Foto de las conexiones" : "Photo of the connections"],
+  }],
+  questions: [],
+  safety: { level: "normal", guidance: "" },
+  readyToConfirm: false,
+  category: "plumbing",
+  materialsHint: [locale === "es" ? "Linterna y toallas" : "Flashlight and towels"],
+  assessmentToken: "demo-assessment",
+});
 
 type ChatIntakeProps = {
   accessToken: string;
@@ -334,9 +353,13 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           translations: Object.values(translations).filter(({ translationToken }) => Boolean(translationToken)).map(({ original, translated, sourceLocale, targetLocale, translationToken }) => ({ original, translated, sourceLocale, targetLocale, translationToken })),
         }));
         files.forEach((file) => form.append("media", file, file.name));
-        const response = await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) });
-        const body = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
-        if (!response.ok) throw new Error(apiError(response.status, body, locale));
+        const body = accessToken.startsWith("demo.")
+          ? demoAssessment(locale, content)
+          : await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
+            const result = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
+            if (!response.ok) throw new Error(apiError(response.status, result, locale));
+            return result;
+          });
         setAssessment(body);
         setMessages([...nextMessages, { role: "assistant", content: body.reply, locale: body.locale }]);
         setSelectedIssueIds(body.issueCandidates.filter((candidate) => candidate.likelihood !== "low").map((candidate) => candidate.id));

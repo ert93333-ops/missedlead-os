@@ -98,6 +98,7 @@ Render에는 최소한 다음 값이 필요합니다.
 - DB: `supabase/migrations/`
 - 브라우저 persona 검증: `scripts/persona-matrix-ui.mjs`
 - 무료 배포 절차: `docs/DEPLOY_FREE.md`
+- AI 도구에 붙여 넣을 전체 지침: `docs/AI_COLLABORATOR_RULES.md`
 
 ## 최근 기준점
 

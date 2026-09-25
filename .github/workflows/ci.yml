@@ -20,6 +20,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # server/intake/media.ts의 정제 경로와 해당 테스트는 ffmpeg/ffprobe를 실제로 실행한다.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm test
       - run: pnpm test:mobile
       - run: pnpm build

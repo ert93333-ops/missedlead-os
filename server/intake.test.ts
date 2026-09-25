@@ -73,6 +73,39 @@ describe("chat intake", () => {
     const result = await analyze(app, { locale:"en", history:[{role:"user",content:"I smell gas near the furnace"}] }).expect(200);
     expect(result.body.safety.level).toBe("emergency"); expect(result.body.readyToConfirm).toBe(false); expect(provider.inputs).toHaveLength(0);
   });
+  it("refuses to scope work WeCover does not perform, even when the model accepts it", async () => {
+    const provider = new FakeIntakeProvider();
+    provider.next = {
+      reply: "I can help with carpet cleaning. How many rooms need cleaning?",
+      category: "handyman",
+      summary: "User needs carpet cleaning and movers for the apartment.",
+      issueCandidates: [{ id: "carpet_cleaning", label: "Carpet cleaning service", likelihood: "medium", reason: "Customer asked for carpet cleaning", evidenceNeeded: [] }],
+      questions: [],
+      details: {},
+      safety: { level: "normal", hazards: [], guidance: "" },
+      materialsHint: ["carpet extractor"],
+      readyToConfirm: true,
+    };
+    const { app } = setup(provider);
+    const analyzed = await analyze(app, { locale: "en", history: [{ role: "user", content: "I need movers and someone to clean the carpets" }] }).expect(200);
+    expect(analyzed.body.issueCandidates).toEqual([]);
+    expect(analyzed.body.questions).toEqual([]);
+    expect(analyzed.body.readyToConfirm).toBe(false);
+    expect(analyzed.body.reply).not.toContain("I can help");
+    await request(app).post("/api/intake/confirm").set(bearer("customer"))
+      .send({ assessmentToken: analyzed.body.assessmentToken, customerName: "Alex", address: "Charlotte, NC", acceptedIssueIds: ["carpet_cleaning"], warningAcknowledged: true })
+      .expect(409, { error: "assessment_not_ready" });
+  });
+
+  it("still scopes a repair that only mentions an unrelated service in passing", async () => {
+    const provider = new FakeIntakeProvider();
+    provider.next = { ...assessment(), summary: "Movers damaged the drywall and it needs patching and paint", category: "painting" };
+    const { app } = setup(provider);
+    const analyzed = await analyze(app, { locale: "en", history: [{ role: "user", content: "The movers punched a hole in my drywall" }] }).expect(200);
+    expect(analyzed.body.issueCandidates).toHaveLength(1);
+    expect(analyzed.body.readyToConfirm).toBe(true);
+  });
+
   it("keeps a previously optional question when it becomes safety-critical", () => {
     const result = normalizeModelAssessment({...assessment(), questions:[{id:"access",prompt:"Is the flooded area electrified?",requiredForSafety:true}],readyToConfirm:true}, "STOP", ["access"]);
     expect(result.questions).toHaveLength(1); expect(result.readyToConfirm).toBe(false);

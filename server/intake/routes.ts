@@ -13,6 +13,7 @@ import type { Actor, Repository } from "../repository.js";
 import { IntakeProviderResponseError, IntakeProviderUnavailableError, normalizeModelAssessment, type IntakeAiProvider } from "./provider.js";
 import { MediaSanitizationError, sanitizeMediaBuffer } from "./media.js";
 import { enforceSafetyFloor } from "./safety.js";
+import { enforceServiceScope } from "./scope.js";
 import { AssessmentTokenSigner, InvalidAssessmentTokenError } from "./token.js";
 import { localeSchema, translationRecordSchema, type IntakeMedia, type SignedAssessment } from "./types.js";
 import type { IntakeUsageBudget } from "./usage.js";
@@ -205,7 +206,7 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const suspicious = payload.history.filter((message) => message.role === "user" && INJECTION_PATTERNS.some((pattern) => pattern.test(message.content)));
     if (suspicious.length) console.warn("intake possible prompt injection", { actorId: actor(response).id, matches: suspicious.length, sample: suspicious[0]?.content.slice(0, 120) });
     const rawAssessment = normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions }), "unknown", skippedIds);
-    const safetyAssessment = enforceSafetyFloor(rawAssessment, payload.history, payload.locale);
+    const safetyAssessment = enforceServiceScope(enforceSafetyFloor(rawAssessment, payload.history, payload.locale), payload.locale);
     const remainingQuestions = safetyAssessment.questions.filter((question) => question.requiredForSafety || !skippedIds.includes(question.id));
     // 모델이 같은 질문을 말만 바꿔 다시 묻는 패턴 방지 — 이전 턴의 질문/같은 응답 내 질문과 토큰이 크게 겹치면 제거
     const questionTokens = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2));

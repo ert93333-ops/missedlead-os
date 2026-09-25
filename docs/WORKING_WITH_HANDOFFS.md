@@ -100,6 +100,26 @@ Render에는 최소한 다음 값이 필요합니다.
 - 무료 배포 절차: `docs/DEPLOY_FREE.md`
 - AI 도구에 붙여 넣을 전체 지침: `docs/AI_COLLABORATOR_RULES.md`
 
+## 서비스 범위 페르소나 점검
+
+실제 인테이크 모델과 대화를 진행해 범위 이탈을 검사하는 도구가 있습니다.
+
+```sh
+pnpm exec tsx scripts/persona-scope-probe.ts                 # 15개 페르소나 전체
+pnpm exec tsx scripts/persona-scope-probe.ts offscope_moving  # 특정 페르소나만
+pnpm exec tsx scripts/gemini-quota-check.ts [model]           # 429/모델 폐기 구분
+```
+
+- `GEMINI_API_KEY`가 필요하고, 결과는 `artifacts/persona-scope-probe*.json`에 페르소나마다 저장됩니다.
+- 무료 등급은 분당/일일 호출 제한이 있어 중간에 429로 멈출 수 있습니다. 스크립트는 대기 후 재시도하고, 그때까지의 대화는 저장합니다.
+- `gemini-2.0-flash`는 폐기되어 404입니다. `GEMINI_FALLBACK_MODELS`에 남아 있으면 정리해야 합니다.
+
+발견한 문제와 조치:
+
+- 이사·카펫 청소 요청에 모델이 "I can help with carpet cleaning"이라고 답하고 방 개수를 물었으며, 잔디 깎기·거터 청소 정기 서비스까지 접수하려 했습니다. WeCover가 제공하지 않는 작업입니다.
+- 프롬프트에 미취급 작업 목록과 거절 규칙을 넣고, 모델 응답과 무관하게 서버에서 막도록 `server/intake/scope.ts`의 `enforceServiceScope()`를 `/api/intake/analyze` 경로에 추가했습니다. 범위 밖이면 후보·질문·자재 힌트를 비우고 확정 불가로 만들며, 확정 요청은 409로 거절됩니다.
+- 응급 안내는 범위 밖이어도 그대로 유지하고, "이사 업체가 벽을 파손했다" 같은 실제 수리 요청은 차단하지 않습니다.
+
 ## 최근 기준점
 
 - 데모(역할 테스트 버튼) 세션은 **API를 먼저 호출하고**, API에 닿지 못하거나 데모 토큰이 거부될 때만 로컬 데모 화면으로 물러납니다. 판정은 `src/app/demo.ts`의 `demoFallbackApplies()` 한 곳에 있습니다.

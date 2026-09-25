@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./styles.css";
 import { AuthProvider, type AuthValue, type Role } from "./app/auth";
+import { ApiFailure, demoFallbackApplies, isDemoRequestId, readApiBody } from "./app/demo";
 import { RoleRouter } from "./app/router";
 import { ChatIntake } from "./app/chat/ChatIntake";
 import { AttachmentGallery } from "./app/chat/AttachmentGallery";
@@ -53,8 +54,8 @@ const nextStepHint: Record<"en" | "es", Record<string, string>> = {
 
 async function api<T>(token: string, path: string, method = "GET", body?: unknown, idempotencyKey?: string): Promise<T> {
   const response = await fetch(path, { method, headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
-  const data = await response.json() as T & { error?: string; guidance?: string };
-  if (!response.ok) throw new Error(data.guidance ?? data.error ?? "The request could not be processed.");
+  const { body: data, structured } = await readApiBody<T & { error?: string; guidance?: string }>(response);
+  if (!response.ok) throw new ApiFailure(data.guidance ?? data.error ?? "The request could not be processed.", response.status, structured);
   return data;
 }
 
@@ -87,12 +88,24 @@ function Workspace({ auth, role }: { auth: AuthValue; role: Role }) {
   const [noticeTone, setNoticeTone] = useState<"info" | "ok" | "error">("info");
   const [busy, setBusy] = useState(false);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [demoOffline, setDemoOffline] = useState(false);
   const [intakeLocale, setIntakeLocale] = useState<"en" | "es">("en");
   const [creatingNewRequest, setCreatingNewRequest] = useState(false);
   const call = useCallback(<T,>(path: string, method = "GET", body?: unknown, key?: string) => accessToken ? api<T>(accessToken, path, method, body, key) : Promise.reject(new Error("Please sign in.")), [accessToken]);
-  const refresh = useCallback(async () => { try { const next = await call<Dashboard>("/api/dashboard"); setDashboard(next); setSelectedId((value) => value || next.requests.at(-1)?.id || ""); } catch (error) { setNoticeTone("error"); setNotice(error instanceof Error ? error.message : "Check the API connection."); } finally { setLoading(false); } }, [call]);
+  const refresh = useCallback(async () => {
+    try {
+      const next = await call<Dashboard>("/api/dashboard");
+      setDashboard(next); setSelectedId((value) => value || next.requests.at(-1)?.id || ""); setDemoOffline(false);
+    } catch (error) {
+      // Role test buttons stay usable without a backend; real sessions still see the failure.
+      if (demoFallbackApplies(accessToken, error)) setDemoOffline(true);
+      else { setNoticeTone("error"); setNotice(error instanceof Error ? error.message : "Check the API connection."); }
+    } finally { setLoading(false); }
+  }, [accessToken, call]);
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => clearTimeout(timer); }, [refresh]);
-  useEffect(() => { const controller = new AbortController(); void fetch("/api/capabilities", { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject()).then((value: { payments?: { enabled?: boolean } }) => setPaymentsEnabled(value.payments?.enabled === true)).catch(() => setPaymentsEnabled(false)); return () => controller.abort(); }, []);
+  useEffect(() => {
+    const controller = new AbortController(); void fetch("/api/capabilities", { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject()).then((value: { payments?: { enabled?: boolean } }) => setPaymentsEnabled(value.payments?.enabled === true)).catch(() => setPaymentsEnabled(false)); return () => controller.abort();
+  }, [accessToken]);
   const selected = dashboard.requests.find((item) => item.id === selectedId) ?? dashboard.requests.at(-1);
   const related = <T extends { requestId: string }>(items: T[]) => items.filter((item) => item.requestId === selected?.id);
   const job = dashboard.jobs.find((item) => item.requestId === selected?.id);
@@ -102,7 +115,16 @@ function Workspace({ auth, role }: { auth: AuthValue; role: Role }) {
   const roleTag = role === "customer" ? intakeLocale === "es" ? "Portal del cliente" : "Homeowner portal" : role === "provider" ? "Field pro portal" : "Operations console";
   return <div className={`app-shell${isNewCustomer ? " app-shell--intake" : ""}${role === "customer" && selected ? " app-shell--tabbed" : ""}`} data-role={role} data-testid={`${role}-workspace`}><header className="topbar"><a className="brand" href={`/${role}`}><span>W</span> WeCover</a><div className="session"><span data-testid="derived-role">{actor?.email ?? actor?.id}</span>{role === "customer" && <span className="language-switch language-switch--topbar" role="group" aria-label="Language"><button type="button" aria-pressed={intakeLocale === "en"} onClick={() => setIntakeLocale("en")}>EN</button><button type="button" aria-pressed={intakeLocale === "es"} onClick={() => setIntakeLocale("es")}>ES</button></span>}{role === "customer" && selected && <button onClick={() => setCreatingNewRequest((value) => !value)}>{creatingNewRequest ? intakeLocale === "es" ? "Ver solicitudes" : "View requests" : intakeLocale === "es" ? "Nueva solicitud" : "New request"}</button>}<button onClick={() => void signOut()}>{role === "customer" && intakeLocale === "es" ? "Cerrar sesión" : "Sign out"}</button></div></header><div className="spec-strip" aria-hidden="true"><span>WeCover · Charlotte pilot</span><span className="spec-strip__role">{roleTag}</span><span>{paymentsEnabled ? "Payments live" : "Payments offline"}</span></div><main id="top" className={isNewCustomer ? "intake-main" : undefined}>
     {loading && isNewCustomer && <div className="skeleton-stack" aria-busy="true" aria-label={intakeLocale === "es" ? "Cargando" : "Loading"}><div className="skeleton"/><div className="skeleton"/><div className="skeleton"/></div>}
-    {!loading && isNewCustomer && accessToken && <ChatIntake accessToken={accessToken} initialLocale={intakeLocale} onLocaleChange={setIntakeLocale} onCreated={async (requestId) => { setNotice(intakeLocale === "es" ? "Solicitud confirmada. Estamos buscando técnicos disponibles." : "Request confirmed. We’re looking for available technicians."); await refresh(); setSelectedId(requestId); setCreatingNewRequest(false); }}/>}
+    {!loading && isNewCustomer && accessToken && <ChatIntake accessToken={accessToken} initialLocale={intakeLocale} onLocaleChange={setIntakeLocale} onCreated={async (requestId) => {
+      setNotice(intakeLocale === "es" ? "Solicitud confirmada. Estamos buscando técnicos disponibles." : "Request confirmed. We’re looking for available technicians.");
+      if (isDemoRequestId(requestId)) {
+        setDashboard((current) => ({ ...current, requests: [...current.requests, { id: requestId, customerName: "Demo customer", description: "Leak or drain issue under the sink", address: "Charlotte, NC", safetyStatus: "cleared", status: "intake", providerIds: [], expandedSearch: false, createdAt: new Date().toISOString() }] }));
+      } else {
+        await refresh();
+      }
+      setSelectedId(requestId);
+      setCreatingNewRequest(false);
+    }}/>}
     {!isNewCustomer && <>
     {role === "provider" && <section className="hero"><div><p className="eyebrow">FIELD PRO PORTAL</p><h1>Jobs matched<br/><em>to you.</em></h1><p>Review the reported problem, send an itemized quote, then record permits and before/after evidence from the field.</p></div><div className="trust-card" data-testid="pilot-safety-gate"><strong>How you get paid</strong><span>Itemized quotes only — no lump sums</span><span>Before/after evidence protects your payout</span><span>County permits verified before work starts</span></div></section>}
     {role === "operator" && <section className="hero"><div><p className="eyebrow">OPERATIONS CONSOLE</p><h1>Run the Charlotte<br/><em>pilot.</em></h1><p>Match cleared requests, verify county permits, resolve disputes and refunds, and settle jobs after the protection window.</p></div><div className="trust-card"><strong>Controls in place</strong><span>Hazardous reports blocked automatically</span><span>Permit-required work gated until verified</span><span>Open disputes pause settlement</span></div></section>}
@@ -111,7 +133,7 @@ function Workspace({ auth, role }: { auth: AuthValue; role: Role }) {
     {selected && role === "customer" && <p className="next-step" data-testid="next-step">{selected.safetyStatus === "blocked" ? (intakeLocale === "es" ? "Este reporte necesita un especialista — nuestro equipo lo contactará directamente." : "This report needs a specialist — our team will contact you directly.") : nextStepHint[intakeLocale][selected.status] ?? ""}</p>}
     {selected && <ol className="stepper" aria-label={role === "customer" ? intakeLocale === "es" ? "Progreso de la solicitud" : "Repair progress" : "Job progress"}>{(role === "customer" ? intakeLocale === "es" ? ["Solicitud", "Búsqueda", "Presupuestos", "Depósito", "Trabajo", "Protección", "Final"] : ["Request", "Matching", "Quotes", "Deposit", "Work", "Protection", "Complete"] : ["Intake", "Matching", "Quotes", "Deposit", "Work", "Protection", "Settlement"]).map((label, index) => <li key={label} className={`${index <= progress ? "done" : ""}${index === progress ? " current" : ""}`} aria-current={index === progress ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol>}
     {loading && <div className="skeleton-stack" aria-busy="true" aria-label={intakeLocale === "es" ? "Cargando" : "Loading"}><div className="skeleton"/><div className="skeleton"/><div className="skeleton"/></div>}
-    {!loading && role === "customer" && <CustomerView selected={selected} quotes={related(dashboard.quotes)} changes={related(dashboard.changes)} job={job} disputes={related(dashboard.disputes)} messages={related(dashboard.messages ?? [])} schedule={dashboard.schedules?.find((item) => item.requestId === selected?.id)} review={dashboard.reviews?.find((item) => item.requestId === selected?.id)} selfId={actor?.id} busy={busy} paymentsEnabled={paymentsEnabled} locale={intakeLocale} act={act} call={call}/>}
+    {!loading && role === "customer" && (demoOffline ? <DemoCustomerView selected={selected} locale={intakeLocale}/> : <CustomerView selected={selected} quotes={related(dashboard.quotes)} changes={related(dashboard.changes)} job={job} disputes={related(dashboard.disputes)} messages={related(dashboard.messages ?? [])} schedule={dashboard.schedules?.find((item) => item.requestId === selected?.id)} review={dashboard.reviews?.find((item) => item.requestId === selected?.id)} selfId={actor?.id} busy={busy} paymentsEnabled={paymentsEnabled} locale={intakeLocale} act={act} call={call}/>)}
     {!loading && role === "provider" && <ProviderView selected={selected} evidence={related(dashboard.evidence)} messages={related(dashboard.messages ?? [])} quotes={related(dashboard.quotes)} schedule={dashboard.schedules?.find((item) => item.requestId === selected?.id)} selfId={actor?.id} busy={busy} act={act} call={call} accessToken={accessToken ?? ""}/>}
     {!loading && role === "operator" && <OperatorView dashboard={dashboard} selected={selected} disputes={dashboard.disputes} busy={busy} act={act} call={call}/>}
     </>}
@@ -282,6 +304,19 @@ function OperatorView({ dashboard, selected, disputes, busy, act, call }: { dash
 }
 
 function Empty({ text }: { text: string }) { return <div className="empty"><img className="empty__art" src="/img/empty-state.png" alt=""/>{text}</div>; }
+
+function DemoCustomerView({ selected, locale }: { selected?: ServiceRequest; locale: "en" | "es" }) {
+  if (!selected) return null;
+  const es = locale === "es";
+  return <div className="dashboard-grid" data-testid="demo-request-view">
+    <section className="panel span-two">
+      <div className="section-title"><p><ClipboardIcon size={14}/>{es ? "SU SOLICITUD" : "YOUR REQUEST"}</p><h2>{selected.description}</h2></div>
+      <div className="meta"><span className="pill cleared"><ShieldCheckIcon size={12}/>{es ? "Seguridad revisada" : "Safety reviewed"}</span><span>{selected.address}</span></div>
+      <p className="warning">{es ? "Esta solicitud de demostración está guardada localmente. Conecte la API para buscar técnicos reales." : "This demo request is stored locally. Connect the API to match real technicians."}</p>
+    </section>
+    <section className="panel" data-testid="quote-comparison"><div className="section-title"><p><ReceiptIcon size={14}/>{es ? "PRESUPUESTOS" : "QUOTES"}</p><h2>{es ? "Compare técnicos y alcance" : "Compare your quotes"}</h2></div><p className="payment-unavailable">{es ? "La demostración no envía solicitudes ni cobra pagos." : "Demo mode does not send requests or collect payments."}</p><Empty text={es ? "Los presupuestos aparecerán cuando la API esté conectada." : "Quotes will appear when the API is connected."}/></section>
+  </div>;
+}
 
 function MessageThread({ messages, selfId, selfLabel, otherLabel, locale }: { messages: ThreadMessage[]; selfId?: string; selfLabel: string; otherLabel: string; locale: "en" | "es" }) {
   if (!messages.length) return null;

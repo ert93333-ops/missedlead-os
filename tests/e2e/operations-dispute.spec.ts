@@ -33,11 +33,13 @@ test("operator resolves evidence-backed dispute, refunds, and sees immutable aud
       return route.fulfill({ status: 201, json: { state: "completed", amountCents: 2500 } });
     }
     if (path === "/api/operators/providers/provider-new/eligibility" && req.method() === "PUT") {
-      expect(req.postDataJSON()).toMatchObject({status:"approved",organizationName:"New Provider",licenseVerified:true,insuranceVerified:true,serviceCategories:["general"],serviceAreas:["Charlotte"]});
+      // Manual eligibility can only park or suspend a provider; approval requires the reviewed application.
+      expect(req.postDataJSON()).toMatchObject({status:"pending",organizationName:"New Provider",licenseVerified:true,insuranceVerified:true,serviceCategories:["general"],serviceAreas:["Charlotte"]});
       return route.fulfill({json:req.postDataJSON()});
     }
     if (path === "/api/ops/recovery" && req.method() === "GET") return route.fulfill({json:{claims:[{claimId:"claim-stuck",kind:"settlement"}],receivables:[{id:"recv-1",amountCents:1200,reason:"partial reversal"}]}});
     if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({json:{permits:[]}});
+    if (path === "/api/providers/applications" && req.method() === "GET") return route.fulfill({json:{applications:[]}});
     if (path === "/api/ops/recovery/receivables/recv-1/resolve" && req.method() === "POST") return route.fulfill({json:{id:"recv-1",status:"resolved"}});
     throw new Error(`Unexpected operator API request: ${req.method()} ${path}`);
   });
@@ -46,15 +48,17 @@ test("operator resolves evidence-backed dispute, refunds, and sees immutable aud
   await page.getByTestId("demo-operator").click();
   await expect(page.getByTestId("operator-console")).toBeVisible();
   await expect(page.getByText("internal · open · After photo shows a persistent leak")).toBeVisible();
-  await expect(page.getByTestId("audit-log")).toContainText("evidence.submitted");
+  // The console renders a readable label and keeps the immutable action code in the title.
+  await expect(page.getByTestId("audit-log")).toContainText("Evidence submitted");
+  await expect(page.getByTestId("audit-log").locator('[title="evidence.submitted"]')).toHaveCount(1);
   await page.getByRole("button", { name: "Resolve", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Dispute resolved");
-  await expect(page.getByTestId("audit-log")).toContainText("dispute.resolved");
+  await expect(page.getByTestId("audit-log").locator('[title="dispute.resolved"]')).toHaveCount(1);
   await page.getByLabel("Refund amount USD").fill("25");
   await page.getByLabel("Refund reason").fill("Evidence-supported remediation");
   await page.getByRole("button", { name: "Issue refund" }).click();
   await expect(page.getByRole("status")).toContainText("Refund");
-  await expect(page.getByTestId("audit-log")).toContainText("refund.completed");
+  await expect(page.getByTestId("audit-log").locator('[title="refund.completed"]')).toHaveCount(1);
   await page.getByLabel("Provider ID").fill("provider-new");
   await page.getByLabel("Organization name").fill("New Provider");
   await page.getByLabel("License expires").fill("2027-09-01T09:00");

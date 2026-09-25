@@ -2,7 +2,7 @@
  * Supabase Auth 래퍼. 세션을 감시하고 actor(id/email/role)와 accessToken을 제공한다.
  * 역할은 session.user.app_metadata.role에서 읽는다(없으면 customer).
  * 공개 호스트(터널 등)에서는 loopback Supabase URL 대신 same-origin /supa 프록시를 사용한다.
- * password 있으면 signInWithPassword, 없으면 매직링크(OTP). selectDemoActor는 dev 전용.
+ * password 있으면 signInWithPassword, 없으면 매직링크(OTP). quickDemoLogin은 dev/데모 빌드 전용.
  */
 import { createClient, type Session } from "@supabase/supabase-js";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -16,7 +16,6 @@ export type AuthValue = {
   signIn: (email: string, password?: string) => Promise<void>;
   signOut: () => Promise<void>;
   quickDemoLogin?: (role: Role) => Promise<void>;
-  selectDemoActor?: (role: Role) => void;
 };
 
 const roles = new Set<Role>(["customer", "provider", "operator"]);
@@ -38,6 +37,7 @@ function actorFromSession(session: Session | null): Actor | null {
   return roles.has(role as Role) ? { id: session.user.id, email: session.user.email, role: role as Role } : null;
 }
 
+/** Demo sessions are visual-only; src/app/demo.ts decides when they may run offline. */
 function demoSession(role: Role): { actor: Actor; accessToken: string } {
   const payload = btoa(JSON.stringify({ sub: `demo-${role}`, email: `${role}@demo.wecover.local`, app_metadata: { role } })).replaceAll("=", "");
   return { actor: { id: `demo-${role}`, email: `${role}@demo.wecover.local`, role }, accessToken: `demo.${payload}.session` };
@@ -70,25 +70,7 @@ export function AuthProvider({ children }: { children: (auth: AuthValue) => Reac
       if (error) throw error;
     },
     signOut: async () => { setDemo(null); if (supabase) await supabase.auth.signOut(); },
-    quickDemoLogin: demoAuthEnabled ? async (role) => {
-      try {
-        const response = await fetch('/api/demo/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role }),
-        });
-        const result = await response.json().catch(() => ({})) as { actor?: Actor; access_token?: string };
-        if (response.ok && result.actor && result.access_token) {
-          setDemo({ actor: result.actor, accessToken: result.access_token });
-          return;
-        }
-      } catch {
-        // Visual demo access remains available when the optional demo database
-        // is not configured; production data requests still require a real session.
-      }
-      setDemo(demoSession(role));
-    } : undefined,
-    selectDemoActor: demoAuthEnabled ? (role) => setDemo(demoSession(role)) : undefined,
+    quickDemoLogin: demoAuthEnabled ? async (role) => setDemo(demoSession(role)) : undefined,
   }), [demo, loading, session]);
 
   return <>{children(value)}</>;

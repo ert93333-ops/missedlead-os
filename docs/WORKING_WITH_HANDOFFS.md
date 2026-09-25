@@ -102,8 +102,10 @@ Render에는 최소한 다음 값이 필요합니다.
 
 ## 최근 기준점
 
-- `e173ff5 Remove sink example imagery from intake`
-- 고객 intake의 싱크대 예시 이미지와 관련 SVG를 제거했습니다.
-- 외부 Render URL에서 이미지 없는 intake 화면을 확인했습니다.
-- 역할별 테스트 버튼과 데모 intake fallback이 배포되어 있습니다.
+- 데모(역할 테스트 버튼) 세션은 **API를 먼저 호출하고**, API에 닿지 못하거나 데모 토큰이 거부될 때만 로컬 데모 화면으로 물러납니다. 판정은 `src/app/demo.ts`의 `demoFallbackApplies()` 한 곳에 있습니다.
+- 서버가 실제로 응답한 오류(검증 실패, `AI_PROVIDER_UNAVAILABLE` 같은 503)는 데모에서도 기존 오류·재시도 UI를 그대로 보여 줍니다. 무조건 데모 화면으로 덮지 않습니다.
+- `/api/intake/confirm`은 `access`/`pets`가 모두 비어 있으면 `scopeDetails`를 보내지 않습니다.
+- E2E mock 레인이 앱 변경을 따라가지 못해 깨져 있던 부분을 맞췄습니다: provider/operator 화면의 `/api/providers/application(s)` 조회 추가, 감사 로그의 표시 라벨 + `title`의 원본 action 코드 검증, 수동 eligibility 폼은 `pending`/`suspended`만 전송(승인은 신청서 심사 경로).
+- 검증: `pnpm test` 301개 통과, `pnpm build` 통과, `pnpm exec playwright test` 19개 통과·1개 skip(Supabase 통합 레인), `pnpm lint` 경고 31개로 이전과 동일.
+- 미실행: `node scripts/persona-matrix-ui.mjs`(preview :5199 + API :8787 + Supabase 계정 필요, 로컬 자격증명 없음), `pnpm test:mobile`(mobile 미변경).
 - 현재 작업을 시작할 때 먼저 `git pull --rebase origin master`를 실행하고, 작업 종료 후 위 종료 규칙을 따릅니다.

@@ -28,6 +28,7 @@ test("72-hour hold rejects preflight and performs no settlement", async ({ page 
     }
     if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({ json: { permits: [] } });
     if (path === "/api/ops/recovery" && req.method() === "GET") return route.fulfill({ json: { claims: [], receivables: [] } });
+    if (path === "/api/providers/applications" && req.method() === "GET") return route.fulfill({ json: { applications: [] } });
     throw new Error(`Hold allowed forbidden API request: ${req.method()} ${path}`);
   });
   await openOperator(page);
@@ -58,6 +59,7 @@ test("exact 72-hour boundary authorizes one idempotent settlement", async ({ pag
     }
     if (path === "/api/ops/permits" && req.method() === "GET") return route.fulfill({ json: { permits: [] } });
     if (path === "/api/ops/recovery" && req.method() === "GET") return route.fulfill({ json: { claims: [], receivables: [] } });
+    if (path === "/api/providers/applications" && req.method() === "GET") return route.fulfill({ json: { applications: [] } });
     throw new Error(`Unexpected settlement API request: ${req.method()} ${path}`);
   });
   await openOperator(page);

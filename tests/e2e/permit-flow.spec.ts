@@ -31,6 +31,7 @@ test("provider submits an itemized permit-required quote and records the county 
       return json({ permit });
     }
     if (path === "/api/requests/req-p1/intake-media" && req.method() === "GET") return json({ media: [] });
+    if (path === "/api/providers/application" && req.method() === "GET") return json({ application: null, documents: [] });
     if (path === "/api/providers/requests/req-p1/quote" && req.method() === "POST") {
       submittedQuote = req.postDataJSON();
       return json({ quote: { id: "quote-p1", requestId: "req-p1" } }, 201);
@@ -98,6 +99,7 @@ test("operator verifies a permit record from the queue with a verification refer
     expect(req.headers().authorization).toMatch(/^Bearer demo\./);
     if (path === "/api/dashboard" && req.method() === "GET") return json(blank());
     if (path === "/api/ops/permits" && req.method() === "GET") return json({ permits: [permit] });
+    if (path === "/api/providers/applications" && req.method() === "GET") return json({ applications: [] });
     if (path === "/api/ops/recovery" && req.method() === "GET") return json({ claims: [], receivables: [] });
     if (path === "/api/requests/req-9/permit" && req.method() === "PUT") {
       const body = req.postDataJSON() as { permitNumber: string; inspectionStatus: string; verificationReference: string };

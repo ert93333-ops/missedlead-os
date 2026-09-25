@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { maskMessage } from "../../server/app";
 import { AssessmentTokenSigner } from "../../server/intake/token";
 import { compositeQuoteScore, explorationSelected, InMemoryRepository } from "../../server/repository";
+import { ApiFailure, demoFallbackApplies } from "../../src/app/demo";
 import { resolve } from "node:path";
 
 type RecordMap = Record<string, unknown>;
@@ -24,6 +25,29 @@ test("message contact masking removes US Social Security numbers",()=>{
   const value=maskMessage("my ssn is 123-45-6789, call 704-555-1212");
   expect(value).toBe("my ssn is [ssn masked], call [phone masked]");
   expect(value).not.toContain("123-45-6789");
+});
+
+test("demo fallback covers an unreachable API only, never real sessions or server-reported failures", () => {
+  const demo = "demo.payload.session";
+  expect(demoFallbackApplies(demo, new Error("network failure"))).toBe(true);
+  expect(demoFallbackApplies(demo, new ApiFailure("proxy error", 500, false))).toBe(true);
+  expect(demoFallbackApplies(demo, new ApiFailure("static host", 404, false))).toBe(true);
+  for (const status of [401, 403]) expect(demoFallbackApplies(demo, new ApiFailure("rejected", status, true))).toBe(true);
+  // Server-reported outages and validation errors keep their own UX, demo included.
+  for (const status of [400, 404, 409, 422, 500, 503]) expect(demoFallbackApplies(demo, new ApiFailure("reported", status, true))).toBe(false);
+  for (const token of [null, undefined, "real.jwt.token"]) expect(demoFallbackApplies(token, new Error("network failure"))).toBe(false);
+});
+
+test("demo customer can complete intake without an API session", async ({ page }) => {
+  await actor(page, "customer");
+  await page.getByRole("button", { name: "Clogged drain" }).click();
+  await expect(page.getByTestId("intake-assessment")).toBeVisible();
+  await page.getByLabel("Your name").fill("Demo customer");
+  await page.getByLabel("Service address").fill("Charlotte, NC");
+  await page.getByLabel(/I understand this is a provisional scope/).check();
+  await page.getByRole("button", { name: "Confirm and find technicians" }).click();
+  await expect(page.getByRole("heading", { name: "Leak or drain issue under the sink" })).toBeVisible();
+  await expect(page.getByTestId("demo-request-view")).toBeVisible();
 });
 
 test("15 percent exploration and composite quote ordering are deterministic",()=>{
@@ -255,6 +279,8 @@ test("customer full flow renders every role and enforces lifecycle API contracts
     if (url === "/api/requests/req-1/quote-details" && request.method() === "GET") return fulfill(route,200,{details:[]});
     if (url === "/api/requests/req-1/permit" && request.method() === "GET") return fulfill(route,200,{permit:null});
     if (url === "/api/ops/permits" && request.method() === "GET") return fulfill(route,200,{permits:[]});
+    if (url === "/api/providers/application" && request.method() === "GET") return fulfill(route,200,{application:null,documents:[]});
+    if (url === "/api/providers/applications" && request.method() === "GET") return fulfill(route,200,{applications:[]});
     if (url === "/api/providers/requests/req-1/quote" && request.method() === "POST") {
       expect(phase).toBe("matched");
       const submitted = request.postDataJSON() as { scope: string; diagnosticCents: number; laborCents: number; materialsCents: number; taxCents: number; totalCents: number; validUntil: string; earliestStartAt: string; warrantyDays: number; siteVisitRequired: boolean; permitRequired: boolean; inspectionStatus: string };

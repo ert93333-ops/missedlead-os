@@ -8,6 +8,7 @@ import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
 import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
 
 import { categoryIcon, categoryLabel, issueIcon } from "../issueIcon";
+import { ApiFailure, demoFallbackApplies, demoRequestId, readApiBody } from "../demo";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
 type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean; quoted?: string; note?: boolean };
@@ -32,7 +33,7 @@ const demoAssessment = (locale: IntakeLocale, content: string): IntakeAssessment
   }],
   questions: [],
   safety: { level: "normal", guidance: "" },
-  readyToConfirm: false,
+  readyToConfirm: true,
   category: "plumbing",
   materialsHint: [locale === "es" ? "Linterna y toallas" : "Flashlight and towels"],
   assessmentToken: "demo-assessment",
@@ -353,13 +354,15 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           translations: Object.values(translations).filter(({ translationToken }) => Boolean(translationToken)).map(({ original, translated, sourceLocale, targetLocale, translationToken }) => ({ original, translated, sourceLocale, targetLocale, translationToken })),
         }));
         files.forEach((file) => form.append("media", file, file.name));
-        const body = accessToken.startsWith("demo.")
-          ? demoAssessment(locale, content)
-          : await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
-            const result = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
-            if (!response.ok) throw new Error(apiError(response.status, result, locale));
-            return result;
-          });
+        const body = await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
+          const { body: result, structured } = await readApiBody<IntakeAssessment & { error?: string }>(response);
+          if (!response.ok) throw new ApiFailure(apiError(response.status, result, locale), response.status, structured);
+          return result;
+        }).catch((caught: unknown) => {
+          // Role test buttons keep working when the assistant API is unreachable.
+          if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          return demoAssessment(locale, content);
+        });
         setAssessment(body);
         setMessages([...nextMessages, { role: "assistant", content: body.reply, locale: body.locale }]);
         setSelectedIssueIds(body.issueCandidates.filter((candidate) => candidate.likelihood !== "low").map((candidate) => candidate.id));
@@ -389,20 +392,29 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     event.preventDefault();
     if (!assessment?.assessmentToken) return;
     const form = new FormData(event.currentTarget);
+    const scopeDetails = {
+      ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}),
+      ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}),
+    };
     setConfirming(true);
     setError("");
     try {
       let pending = pendingMediaRequest;
       if (!pending) {
-        const response = await fetch("/api/intake/confirm", {
+        const requestId = await fetch("/api/intake/confirm", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), scopeDetails: { ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}), ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}) } }),
+          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), ...(Object.keys(scopeDetails).length > 0 ? { scopeDetails } : {}) }),
           signal: AbortSignal.timeout(30_000),
+        }).then(async (response) => {
+          const { body, structured } = await readApiBody<{ requestId?: string; error?: string }>(response);
+          if (!response.ok || !body.requestId) throw new ApiFailure(apiError(response.status, body, locale), response.status, structured);
+          return body.requestId;
+        }).catch((caught: unknown) => {
+          if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          return demoRequestId();
         });
-        const body = await response.json().catch(() => ({})) as { requestId?: string; error?: string };
-        if (!response.ok || !body.requestId) throw new Error(apiError(response.status, body, locale));
-        pending = { requestId: body.requestId, assessmentToken: assessment.assessmentToken };
+        pending = { requestId, assessmentToken: assessment.assessmentToken };
         setPendingMediaRequest(pending);
       }
       const finish = async () => {
@@ -411,9 +423,13 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           const upload = new FormData();
           upload.append("assessmentToken", pending.assessmentToken);
           files.forEach((file) => upload.append("media", file, file.name));
-          const uploadResponse = await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload, signal: AbortSignal.timeout(120_000) });
-          const uploadBody = await uploadResponse.json().catch(() => ({})) as { error?: string };
-          if (!uploadResponse.ok) throw new Error(apiError(uploadResponse.status, uploadBody, locale));
+          await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload, signal: AbortSignal.timeout(120_000) }).then(async (uploadResponse) => {
+            const { body: uploadBody, structured } = await readApiBody<{ error?: string }>(uploadResponse);
+            if (!uploadResponse.ok) throw new ApiFailure(apiError(uploadResponse.status, uploadBody, locale), uploadResponse.status, structured);
+          }).catch((caught: unknown) => {
+            // A local demo walkthrough keeps the attachments client-side only.
+            if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          });
         }
         sessionStorage.removeItem(storageKey);
         setPendingMediaRequest(null);

@@ -107,5 +107,9 @@ Render에는 최소한 다음 값이 필요합니다.
 - `/api/intake/confirm`은 `access`/`pets`가 모두 비어 있으면 `scopeDetails`를 보내지 않습니다.
 - E2E mock 레인이 앱 변경을 따라가지 못해 깨져 있던 부분을 맞췄습니다: provider/operator 화면의 `/api/providers/application(s)` 조회 추가, 감사 로그의 표시 라벨 + `title`의 원본 action 코드 검증, 수동 eligibility 폼은 `pending`/`suspended`만 전송(승인은 신청서 심사 경로).
 - 검증: `pnpm test` 301개 통과, `pnpm build` 통과, `pnpm exec playwright test` 19개 통과·1개 skip(Supabase 통합 레인), `pnpm lint` 경고 31개로 이전과 동일.
+- CI를 수리했습니다. `pnpm/action-setup`의 `version: 9`가 `packageManager: pnpm@9.15.9`와 충돌해 2026-09-20 이후 모든 실행이 설정 단계에서 죽어 있었고, `server/intake/media.ts`가 쓰는 ffmpeg/ffprobe가 runner에 없어 미디어 정제 테스트가 ENOENT로 실패했습니다. 현재 ci 실행 48번(`9ee0311`)이 성공입니다.
+- **배포 주의**: Render 자동 배포가 `9dc3677`(2026-09-20 16:15 UTC) 이후 멈췄습니다. 그 뒤의 push에는 GitHub deployment 기록이 아예 생성되지 않았고(`GET /repos/missedlead-os/missedlead-os/deployments`), 라이브는 여전히 이전 번들을 서빙합니다. Render 대시보드에서 Auto-Deploy 상태와 저장소 연결을 확인하고 Manual Deploy를 실행해야 최신 코드가 반영됩니다.
+- 라이브 반영 확인은 번들 문자열로 합니다: `curl -s https://wecover.onrender.com/`에서 `assets/index-*.js` 이름을 얻은 뒤 그 파일에 `demo-request-`가 있으면 이번 변경이 배포된 것입니다.
+- 운영 호스트에도 ffmpeg/ffprobe가 있어야 고객의 음성·영상 첸부 정제가 동작합니다. Render 호스트에서는 아직 확인하지 못했습니다.
 - 미실행: `node scripts/persona-matrix-ui.mjs`(preview :5199 + API :8787 + Supabase 계정 필요, 로컬 자격증명 없음), `pnpm test:mobile`(mobile 미변경).
 - 현재 작업을 시작할 때 먼저 `git pull --rebase origin master`를 실행하고, 작업 종료 후 위 종료 규칙을 따릅니다.
